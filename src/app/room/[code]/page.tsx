@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
-import { Copy, Check, Crown, LogOut, Play, ShieldAlert, Loader2, Swords, BrainCircuit, Zap, Vote, UserX, Palette, RotateCcw, Home, Sliders, Timer, Hash } from "lucide-react";
+import { Copy, Check, Crown, LogOut, Play, ShieldAlert, Loader2, Swords, BrainCircuit, Zap, Vote, UserX, Palette, RotateCcw, Home, Sliders, Timer, Hash, Eye } from "lucide-react";
 
 import { startTruthOrDare, TruthOrDareState } from "@/modules/games/truth-or-dare/actions";
 import { startMindReader, MindReaderState } from "@/modules/games/mind-reader/actions";
@@ -21,13 +21,16 @@ import ImpostorWordGame from "@/modules/games/impostor-word/component";
 import DoodleGuessGame from "@/modules/games/doodle-guess/component";
 
 import EmoteOverlay from "@/components/ui/EmoteOverlay";
+import AvatarPicker from "@/components/ui/AvatarPicker";
 import { sounds } from "@/lib/audio";
 
 interface Player {
   player_id: string;
   is_ready: boolean;
+  is_spectator: boolean;
   profiles: {
     username: string;
+    avatar_url?: string;
   };
 }
 
@@ -104,7 +107,7 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
   async function fetchPlayers(rId: string) {
     const { data } = await supabase
       .from("room_players")
-      .select("player_id, is_ready, profiles(username)")
+      .select("player_id, is_ready, is_spectator, profiles(username, avatar_url)")
       .eq("room_id", rId);
 
     if (data) {
@@ -220,19 +223,23 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
     sounds.playClick();
     if (!roomId || !currentGameId) return;
     setStartingGame(true);
+
+    // Hanya ambil pemain utama (non-spectator) untuk dikirim ke game
+    const activePlayers = players.filter((p) => !p.is_spectator);
+
     try {
       if (currentGameId === "truth-or-dare") {
-        await startTruthOrDare(roomId, players);
+        await startTruthOrDare(roomId, activePlayers);
       } else if (currentGameId === "mind-reader") {
-        await startMindReader(roomId, players);
+        await startMindReader(roomId, activePlayers);
       } else if (currentGameId === "speed-battle") {
-        await startSpeedBattle(roomId, players);
+        await startSpeedBattle(roomId, activePlayers);
       } else if (currentGameId === "most-likely-to") {
-        await startMostLikelyTo(roomId, players);
+        await startMostLikelyTo(roomId, activePlayers);
       } else if (currentGameId === "impostor-word") {
-        await startImpostorWord(roomId, players);
+        await startImpostorWord(roomId, activePlayers);
       } else if (currentGameId === "doodle-guess") {
-        await startDoodleGuess(roomId, players);
+        await startDoodleGuess(roomId, activePlayers);
       }
     } catch (err: any) {
       alert(err.message);
@@ -286,38 +293,41 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
 
   const isHost = currentUserId === hostId;
   const myPlayerState = players.find((p) => p.player_id === currentUserId);
-  const allReady = players.length >= 2 && players.every((p) => p.is_ready);
-  const currentUsername = players.find((p) => p.player_id === currentUserId)?.profiles?.username || "Pemain";
+  const activePlayers = players.filter((p) => !p.is_spectator);
+  const spectatorPlayers = players.filter((p) => p.is_spectator);
+  const allReady = activePlayers.length >= 2 && activePlayers.every((p) => p.is_ready);
+  const currentUsername = myPlayerState?.profiles?.username || "Pemain";
+  const myAvatar = myPlayerState?.profiles?.avatar_url || "🎮";
 
   let mainContent;
 
   if (status === "playing" && currentGameId === "truth-or-dare" && roomId && currentUserId) {
     mainContent = (
-      <TruthOrDareGame roomId={roomId} currentUserId={currentUserId} gameState={gameState as TruthOrDareState} players={players} />
+      <TruthOrDareGame roomId={roomId} currentUserId={currentUserId} gameState={gameState as TruthOrDareState} players={activePlayers} />
     );
   } else if (status === "playing" && currentGameId === "mind-reader" && roomId && currentUserId && hostId) {
     mainContent = (
-      <MindReaderGame roomId={roomId} currentUserId={currentUserId} hostId={hostId} gameState={gameState as MindReaderState} players={players} />
+      <MindReaderGame roomId={roomId} currentUserId={currentUserId} hostId={hostId} gameState={gameState as MindReaderState} players={activePlayers} />
     );
   } else if (status === "playing" && currentGameId === "speed-battle" && roomId && currentUserId && hostId) {
     mainContent = (
-      <SpeedBattleGame roomId={roomId} currentUserId={currentUserId} hostId={hostId} gameState={gameState as SpeedBattleState} players={players} />
+      <SpeedBattleGame roomId={roomId} currentUserId={currentUserId} hostId={hostId} gameState={gameState as SpeedBattleState} players={activePlayers} />
     );
   } else if (status === "playing" && currentGameId === "most-likely-to" && roomId && currentUserId && hostId) {
     mainContent = (
-      <MostLikelyToGame roomId={roomId} currentUserId={currentUserId} hostId={hostId} gameState={gameState as MostLikelyToState} players={players} />
+      <MostLikelyToGame roomId={roomId} currentUserId={currentUserId} hostId={hostId} gameState={gameState as MostLikelyToState} players={activePlayers} />
     );
   } else if (status === "playing" && currentGameId === "impostor-word" && roomId && currentUserId && hostId) {
     mainContent = (
-      <ImpostorWordGame roomId={roomId} currentUserId={currentUserId} hostId={hostId} gameState={gameState as ImpostorWordState} players={players} />
+      <ImpostorWordGame roomId={roomId} currentUserId={currentUserId} hostId={hostId} gameState={gameState as ImpostorWordState} players={activePlayers} />
     );
   } else if (status === "playing" && currentGameId === "doodle-guess" && roomId && currentUserId && hostId) {
     mainContent = (
-      <DoodleGuessGame roomId={roomId} currentUserId={currentUserId} hostId={hostId} gameState={gameState as DoodleGuessState} players={players} />
+      <DoodleGuessGame roomId={roomId} currentUserId={currentUserId} hostId={hostId} gameState={gameState as DoodleGuessState} players={activePlayers} />
     );
   } else if (status === "finished") {
     const scores: Record<string, number> = gameState.scores || {};
-    const sortedPlayers = [...players].sort((a, b) => (scores[b.player_id] || 0) - (scores[a.player_id] || 0));
+    const sortedPlayers = [...activePlayers].sort((a, b) => (scores[b.player_id] || 0) - (scores[a.player_id] || 0));
 
     mainContent = (
       <div className="max-w-md mx-auto glass-panel p-8 text-center space-y-6">
@@ -331,6 +341,7 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
             <div key={p.player_id} className={`p-4 rounded-xl border flex items-center justify-between ${idx === 0 ? "bg-primary/20 border-primary" : "bg-white/5 border-white/10"}`}>
               <div className="flex items-center gap-3">
                 <span className="font-bold text-lg">#{idx + 1}</span>
+                <span className="text-xl">{p.profiles?.avatar_url || "🎮"}</span>
                 <span className="font-semibold">{p.profiles?.username}</span>
               </div>
               <span className="font-bold text-secondary">{scores[p.player_id] || 0} pts</span>
@@ -388,9 +399,18 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {/* AVATAR PICKER UNTUK USER */}
+            {currentUserId && (
+              <AvatarPicker
+                userId={currentUserId}
+                currentAvatar={myAvatar}
+                onUpdate={() => roomId && fetchPlayers(roomId)}
+              />
+            )}
+
             <span className="text-sm bg-white/5 border border-white/10 px-3 py-2 rounded-xl">
-              <strong className="text-white">{players.length}</strong>/{maxPlayers}
+              <strong className="text-white">{activePlayers.length}</strong>/{maxPlayers}
             </span>
             <button onClick={leaveRoom} className="p-2.5 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl transition-colors">
               <LogOut className="w-5 h-5" />
@@ -398,11 +418,15 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
           </div>
         </div>
 
-        {/* LOBBY MEMBERS */}
+        {/* LOBBY MEMBERS (PEMAIN UTAMA & PENONTON) */}
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-textMuted px-1">Lobby Members</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-textMuted px-1">Pemain Utama</h2>
+            <span className="text-xs text-textMuted font-medium">Kapasitas {maxPlayers} Player</span>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {players.map((p) => {
+            {activePlayers.map((p) => {
               const isPlayerHost = p.player_id === hostId;
               const isMe = p.player_id === currentUserId;
 
@@ -414,8 +438,8 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
                   className={`glass-panel p-4 flex items-center justify-between border ${isMe ? "border-primary/50 bg-primary/10" : "border-white/10"}`}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center font-bold text-white shadow-md">
-                      {p.profiles?.username?.[0]?.toUpperCase() || "P"}
+                    <div className="text-2xl p-2 bg-white/5 rounded-xl border border-white/10">
+                      {p.profiles?.avatar_url || "🎮"}
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
@@ -441,6 +465,23 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
               );
             })}
           </div>
+
+          {/* LIST SPECTATORS / PENONTON */}
+          {spectatorPlayers.length > 0 && (
+            <div className="pt-4 border-t border-white/10 space-y-2">
+              <h3 className="text-xs font-bold text-textMuted uppercase flex items-center gap-1.5">
+                <Eye className="w-4 h-4 text-secondary" /> Penonton (Spectators)
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {spectatorPlayers.map((p) => (
+                  <span key={p.player_id} className="px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl text-xs flex items-center gap-2">
+                    <span className="text-base">{p.profiles?.avatar_url || "👀"}</span>
+                    <span className="font-semibold text-white">{p.profiles?.username}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* CUSTOM ROOM RULES SECTION */}
@@ -581,10 +622,16 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
 
         {/* CONTROLS START / READY */}
         <div className="glass-panel p-6 space-y-4">
-          {!isHost && (
+          {!isHost && !myPlayerState?.is_spectator && (
             <button onClick={toggleReady} className={`w-full py-4 text-lg rounded-xl font-bold transition-all ${myPlayerState?.is_ready ? "bg-red-500/20 border-2 border-red-500 text-red-400 hover:bg-red-500/30" : "btn-primary"}`}>
               {myPlayerState?.is_ready ? "Cancel Ready" : "I'm Ready!"}
             </button>
+          )}
+
+          {myPlayerState?.is_spectator && (
+            <div className="p-3 bg-secondary/10 border border-secondary/30 text-secondary rounded-xl text-center text-xs font-bold">
+              👀 Kamu berada di room sebagai Penonton (Spectator)
+            </div>
           )}
 
           {isHost && (

@@ -45,39 +45,37 @@ export async function createRoom(nickname: string, maxPlayers: number) {
   return roomCode;
 }
 
-export async function joinRoom(roomCode: string, nickname: string) {
+export async function joinRoom(roomCode: string, playerName: string) {
   const supabase = createClient();
-  const { userId } = await getOrCreateGuestProfile(nickname);
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error("Sesi tidak ditemukan.");
 
-  // 1. Cari room berdasarkan kode
-  const { data: room, error: roomError } = await supabase
+  const { data: room, error } = await supabase
     .from("rooms")
     .select("id, max_players, status")
     .eq("code", roomCode.toUpperCase())
     .single();
 
-  if (roomError || !room) throw new Error("Kode room tidak ditemukan.");
-  if (room.status !== "waiting") throw new Error("Room sedang dalam permainan.");
+  if (error || !room) throw new Error("Kode room tidak valid!");
 
-  // 2. Periksa jumlah pemain saat ini
-  const { count, error: countError } = await supabase
+  // Cek jumlah pemain aktif
+  const { data: existingPlayers } = await supabase
     .from("room_players")
-    .select("*", { count: "exact", head: true })
+    .select("player_id, is_spectator")
     .eq("room_id", room.id);
 
-  if (countError) throw new Error("Gagal memeriksa kapasitas room.");
-  if (count && count >= room.max_players) throw new Error("Room sudah penuh!");
+  const activePlayers = existingPlayers?.filter((p) => !p.is_spectator) || [];
+  const isFull = activePlayers.length >= room.max_players;
 
-  // 3. Masukkan pemain ke room_players
-  const { error: joinError } = await supabase
-    .from("room_players")
-    .upsert({
-      room_id: room.id,
-      player_id: userId,
-      is_ready: false,
-    }, { onConflict: "room_id,player_id" });
+  // Masukkan ke room (Jika penuh, masuk sebagai Penonton / Spectator)
+  const { error: joinError } = await supabase.from("room_players").upsert({
+    room_id: room.id,
+    player_id: session.user.id,
+    is_ready: isFull ? true : false,
+    is_spectator: isFull,
+  });
 
-  if (joinError) throw new Error(`Gagal bergabung: ${joinError.message}`);
+  if (joinError) throw new Error("Gagal masuk ke room.");
 
-  return roomCode;
+  return roomCode.toUpperCase();
 }
