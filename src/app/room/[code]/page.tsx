@@ -118,6 +118,40 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
     };
   }, [roomId]);
 
+  // =========================================================
+  // PENAMBAHAN: UPDATE STATISTIK XP & WIN KETIKA GAME SELESAI
+  // =========================================================
+  useEffect(() => {
+    async function updatePlayerStats() {
+      if (status === "finished" && currentUserId && gameState.scores) {
+        const myScore = gameState.scores[currentUserId] || 0;
+        
+        const allScores = Object.values(gameState.scores) as number[];
+        const maxScore = Math.max(...allScores, 0);
+        const isWinner = myScore === maxScore && myScore > 0;
+
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("xp, total_matches, wins")
+          .eq("id", currentUserId)
+          .single();
+
+        if (profile) {
+          await supabase
+            .from("profiles")
+            .update({
+              xp: (profile.xp || 0) + myScore + (isWinner ? 50 : 10),
+              total_matches: (profile.total_matches || 0) + 1,
+              wins: (profile.wins || 0) + (isWinner ? 1 : 0),
+            })
+            .eq("id", currentUserId);
+        }
+      }
+    }
+
+    updatePlayerStats();
+  }, [status]);
+
   const copyCode = () => {
     navigator.clipboard.writeText(roomCode);
     setCopied(true);
