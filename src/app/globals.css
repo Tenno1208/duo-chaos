@@ -2,26 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  body {
+    @apply bg-background text-textMain min-h-screen antialiased selection:bg-primary selection:text-white;
+    /* Memberikan sentuhan gradient ambient di latar belakang */
+    background-image: radial-gradient(circle at 50% 0%, #1a103c 0%, transparent 50%),
+                      radial-gradient(circle at 100% 100%, #0a1931 0%, transparent 50%);
+    background-attachment: fixed;
   }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-}
+@layer components {
+  /* Panel untuk Card, Modal, dan Form */
+  .glass-panel {
+    @apply bg-panel backdrop-blur-md border border-white/10 rounded-2xl shadow-xl;
+  }
+  
+  /* Tombol Utama (Action/Submit/Create) */
+  .btn-primary {
+    @apply flex items-center justify-center gap-2 bg-primary hover:bg-violet-500 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-300 shadow-[0_0_15px_rgba(139,92,246,0.3)] hover:shadow-[0_0_25px_rgba(139,92,246,0.6)] active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
+  }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
+  /* Tombol Sekunder (Cancel/Skip/Outline) */
+  .btn-secondary {
+    @apply flex items-center justify-center gap-2 bg-transparent border-2 border-secondary text-secondary hover:bg-secondary/10 font-semibold py-3 px-6 rounded-xl transition-all duration-300 shadow-[0_0_10px_rgba(6,182,212,0.1)] hover:shadow-[0_0_20px_rgba(6,182,212,0.4)] active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
+  }
+  
+  /* Input text seragam */
+  .input-neon {
+    @apply w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-textMuted focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all duration-300;
   }
 }
