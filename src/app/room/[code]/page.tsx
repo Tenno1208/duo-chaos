@@ -21,6 +21,7 @@ import ImpostorWordGame from "@/modules/games/impostor-word/component";
 import DoodleGuessGame from "@/modules/games/doodle-guess/component";
 
 import EmoteOverlay from "@/components/ui/EmoteOverlay";
+import VoiceChat from "@/components/ui/VoiceChat";
 import { sounds } from "@/lib/audio";
 
 interface Player {
@@ -45,7 +46,6 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
   const [currentGameId, setCurrentGameId] = useState<string | null>("truth-or-dare");
   const [gameState, setGameState] = useState<any>({});
 
-  // STATE CUSTOM ROOM RULES
   const [maxRounds, setMaxRounds] = useState<number>(3);
   const [roundTimer, setRoundTimer] = useState<number>(15);
 
@@ -90,6 +90,18 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
 
     initRoom();
   }, [roomCode]);
+
+  // PEMUTAR BGM OTOMATIS BERDASARKAN STATUS ROOM
+  useEffect(() => {
+    if (status === "waiting") {
+      sounds.startBGM("lobby");
+    } else if (status === "playing") {
+      sounds.startBGM("game");
+    } else if (status === "finished") {
+      sounds.stopBGM();
+    }
+    return () => sounds.stopBGM();
+  }, [status]);
 
   async function fetchPlayers(rId: string) {
     const { data } = await supabase
@@ -378,11 +390,16 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="text-sm bg-white/5 border border-white/10 px-4 py-2 rounded-xl">
-              Pemain: <strong className="text-white">{players.length}</strong> / {maxPlayers}
+          <div className="flex items-center gap-2">
+            {/* TOMBOL VOICE CHAT REALTIME */}
+            {roomId && currentUserId && (
+              <VoiceChat roomId={roomId} currentUserId={currentUserId} />
+            )}
+
+            <span className="text-sm bg-white/5 border border-white/10 px-3 py-2 rounded-xl">
+              <strong className="text-white">{players.length}</strong>/{maxPlayers}
             </span>
-            <button onClick={leaveRoom} className="p-3 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl transition-colors">
+            <button onClick={leaveRoom} className="p-2.5 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl transition-colors">
               <LogOut className="w-5 h-5" />
             </button>
           </div>
@@ -445,7 +462,6 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* SETTING JUMLAH RONDE */}
             <div className="space-y-2">
               <label className="text-xs text-textMuted font-semibold flex items-center gap-1">
                 <Hash className="w-3.5 h-3.5 text-secondary" /> Total Ronde: <strong className="text-white">{maxRounds} Ronde</strong>
@@ -473,7 +489,6 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
               )}
             </div>
 
-            {/* SETTING TIMER PER SOAL */}
             <div className="space-y-2">
               <label className="text-xs text-textMuted font-semibold flex items-center gap-1">
                 <Timer className="w-3.5 h-3.5 text-yellow-400" /> Timer Per Soal: <strong className="text-white">{roundTimer} Detik</strong>
