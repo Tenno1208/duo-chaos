@@ -4,15 +4,17 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
-import { Copy, Check, Crown, LogOut, Play, ShieldAlert, Loader2, Swords, BrainCircuit, Zap } from "lucide-react";
+import { Copy, Check, Crown, LogOut, Play, ShieldAlert, Loader2, Swords, BrainCircuit, Zap, Vote } from "lucide-react";
 
 import { startTruthOrDare, TruthOrDareState } from "@/modules/games/truth-or-dare/actions";
 import { startMindReader, MindReaderState } from "@/modules/games/mind-reader/actions";
 import { startSpeedBattle, SpeedBattleState } from "@/modules/games/speed-battle/actions";
+import { startMostLikelyTo, MostLikelyToState } from "@/modules/games/most-likely-to/actions";
 
 import TruthOrDareGame from "@/modules/games/truth-or-dare/component";
 import MindReaderGame from "@/modules/games/mind-reader/component";
 import SpeedBattleGame from "@/modules/games/speed-battle/component";
+import MostLikelyToGame from "@/modules/games/most-likely-to/component";
 
 import EmoteOverlay from "@/components/ui/EmoteOverlay";
 import { sounds } from "@/lib/audio";
@@ -44,7 +46,6 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
   const [startingGame, setStartingGame] = useState(false);
   const [error, setError] = useState("");
 
-  // 1. Inisialisasi Room & User Session
   useEffect(() => {
     async function initRoom() {
       const { data: { session } } = await supabase.auth.getSession();
@@ -80,7 +81,6 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
     initRoom();
   }, [roomCode]);
 
-  // Fetch Daftar Pemain
   async function fetchPlayers(rId: string) {
     const { data } = await supabase
       .from("room_players")
@@ -92,7 +92,6 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
     }
   }
 
-  // 2. Langganan Supabase Realtime (Pemain & Room State)
   useEffect(() => {
     if (!roomId) return;
 
@@ -124,7 +123,6 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
     };
   }, [roomId]);
 
-  // 3. Update Statistik XP, Match, Wins & Panggil Suara Kemenangan saat Game Selesai
   useEffect(() => {
     async function updatePlayerStats() {
       if (status === "finished" && currentUserId && gameState.scores) {
@@ -195,6 +193,8 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
         await startMindReader(roomId, players);
       } else if (currentGameId === "speed-battle") {
         await startSpeedBattle(roomId, players);
+      } else if (currentGameId === "most-likely-to") {
+        await startMostLikelyTo(roomId, players);
       }
     } catch (err: any) {
       alert(err.message);
@@ -227,37 +227,23 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
   const allReady = players.length >= 2 && players.every((p) => p.is_ready);
   const currentUsername = players.find((p) => p.player_id === currentUserId)?.profiles?.username || "Pemain";
 
-  // MENENTUKAN TAMPILAN UTAMA
   let mainContent;
 
   if (status === "playing" && currentGameId === "truth-or-dare" && roomId && currentUserId) {
     mainContent = (
-      <TruthOrDareGame
-        roomId={roomId}
-        currentUserId={currentUserId}
-        gameState={gameState as TruthOrDareState}
-        players={players}
-      />
+      <TruthOrDareGame roomId={roomId} currentUserId={currentUserId} gameState={gameState as TruthOrDareState} players={players} />
     );
   } else if (status === "playing" && currentGameId === "mind-reader" && roomId && currentUserId && hostId) {
     mainContent = (
-      <MindReaderGame
-        roomId={roomId}
-        currentUserId={currentUserId}
-        hostId={hostId}
-        gameState={gameState as MindReaderState}
-        players={players}
-      />
+      <MindReaderGame roomId={roomId} currentUserId={currentUserId} hostId={hostId} gameState={gameState as MindReaderState} players={players} />
     );
   } else if (status === "playing" && currentGameId === "speed-battle" && roomId && currentUserId && hostId) {
     mainContent = (
-      <SpeedBattleGame
-        roomId={roomId}
-        currentUserId={currentUserId}
-        hostId={hostId}
-        gameState={gameState as SpeedBattleState}
-        players={players}
-      />
+      <SpeedBattleGame roomId={roomId} currentUserId={currentUserId} hostId={hostId} gameState={gameState as SpeedBattleState} players={players} />
+    );
+  } else if (status === "playing" && currentGameId === "most-likely-to" && roomId && currentUserId && hostId) {
+    mainContent = (
+      <MostLikelyToGame roomId={roomId} currentUserId={currentUserId} hostId={hostId} gameState={gameState as MostLikelyToState} players={players} />
     );
   } else if (status === "finished") {
     const scores: Record<string, number> = gameState.scores || {};
@@ -288,10 +274,8 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
       </div>
     );
   } else {
-    // TAMPILAN LOBBY (WAITING)
     mainContent = (
       <div className="max-w-2xl mx-auto space-y-8 py-6">
-        {/* ROOM HEADER */}
         <div className="glass-panel p-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div>
             <span className="text-xs uppercase tracking-widest text-textMuted">Room Code</span>
@@ -313,7 +297,6 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
           </div>
         </div>
 
-        {/* PLAYERS LIST */}
         <div className="space-y-4">
           <h2 className="text-lg font-bold text-textMuted px-1">Lobby Members</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -347,13 +330,9 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
 
                   <div>
                     {p.is_ready ? (
-                      <span className="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs font-bold uppercase tracking-wider">
-                        Ready
-                      </span>
+                      <span className="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs font-bold uppercase tracking-wider">Ready</span>
                     ) : (
-                      <span className="px-3 py-1 bg-white/5 text-textMuted border border-white/10 rounded-lg text-xs font-bold uppercase tracking-wider">
-                        Waiting
-                      </span>
+                      <span className="px-3 py-1 bg-white/5 text-textMuted border border-white/10 rounded-lg text-xs font-bold uppercase tracking-wider">Waiting</span>
                     )}
                   </div>
                 </motion.div>
@@ -362,85 +341,67 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
           </div>
         </div>
 
-        {/* GAME SELECTION FOR HOST */}
         {isHost && (
           <div className="space-y-3">
             <label className="text-sm text-textMuted font-bold">Pilih Mini-Game</label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <button
                 onClick={() => { sounds.playClick(); setCurrentGameId("truth-or-dare"); }}
-                className={`p-4 rounded-xl border flex items-center gap-3 transition-all ${
-                  currentGameId === "truth-or-dare"
-                    ? "bg-primary/20 border-primary text-white shadow-[0_0_15px_rgba(139,92,246,0.3)]"
-                    : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
+                className={`p-3 rounded-xl border flex flex-col items-center text-center gap-2 transition-all ${
+                  currentGameId === "truth-or-dare" ? "bg-primary/20 border-primary text-white shadow-[0_0_15px_rgba(139,92,246,0.3)]" : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
                 }`}
               >
                 <Swords className="w-5 h-5 text-accent" />
-                <div className="text-left">
-                  <div className="font-bold text-sm">Truth or Dare</div>
-                  <div className="text-xs text-textMuted">Tantangan konyol</div>
-                </div>
+                <div className="font-bold text-xs">Truth or Dare</div>
               </button>
 
               <button
                 onClick={() => { sounds.playClick(); setCurrentGameId("mind-reader"); }}
-                className={`p-4 rounded-xl border flex items-center gap-3 transition-all ${
-                  currentGameId === "mind-reader"
-                    ? "bg-secondary/20 border-secondary text-white shadow-[0_0_15px_rgba(6,182,212,0.3)]"
-                    : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
+                className={`p-3 rounded-xl border flex flex-col items-center text-center gap-2 transition-all ${
+                  currentGameId === "mind-reader" ? "bg-secondary/20 border-secondary text-white shadow-[0_0_15px_rgba(6,182,212,0.3)]" : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
                 }`}
               >
                 <BrainCircuit className="w-5 h-5 text-secondary" />
-                <div className="text-left">
-                  <div className="font-bold text-sm">Mind Reader</div>
-                  <div className="text-xs text-textMuted">Cari sefrekuensi</div>
-                </div>
+                <div className="font-bold text-xs">Mind Reader</div>
               </button>
 
               <button
                 onClick={() => { sounds.playClick(); setCurrentGameId("speed-battle"); }}
-                className={`p-4 rounded-xl border flex items-center gap-3 transition-all ${
-                  currentGameId === "speed-battle"
-                    ? "bg-yellow-500/20 border-yellow-400 text-white shadow-[0_0_15px_rgba(234,179,8,0.3)]"
-                    : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
+                className={`p-3 rounded-xl border flex flex-col items-center text-center gap-2 transition-all ${
+                  currentGameId === "speed-battle" ? "bg-yellow-500/20 border-yellow-400 text-white shadow-[0_0_15px_rgba(234,179,8,0.3)]" : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
                 }`}
               >
                 <Zap className="w-5 h-5 text-yellow-400" />
-                <div className="text-left">
-                  <div className="font-bold text-sm">Speed Battle</div>
-                  <div className="text-xs text-textMuted">Adu cepat kuis</div>
-                </div>
+                <div className="font-bold text-xs">Speed Battle</div>
+              </button>
+
+              <button
+                onClick={() => { sounds.playClick(); setCurrentGameId("most-likely-to"); }}
+                className={`p-3 rounded-xl border flex flex-col items-center text-center gap-2 transition-all ${
+                  currentGameId === "most-likely-to" ? "bg-pink-500/20 border-pink-400 text-white shadow-[0_0_15px_rgba(236,72,153,0.3)]" : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
+                }`}
+              >
+                <Vote className="w-5 h-5 text-pink-400" />
+                <div className="font-bold text-xs">Most Likely To</div>
               </button>
             </div>
           </div>
         )}
 
-        {/* CONTROLS */}
         <div className="glass-panel p-6 space-y-4">
           {!isHost && (
-            <button
-              onClick={toggleReady}
-              className={`w-full py-4 text-lg rounded-xl font-bold transition-all ${
-                myPlayerState?.is_ready ? "bg-red-500/20 border-2 border-red-500 text-red-400 hover:bg-red-500/30" : "btn-primary"
-              }`}
-            >
+            <button onClick={toggleReady} className={`w-full py-4 text-lg rounded-xl font-bold transition-all ${myPlayerState?.is_ready ? "bg-red-500/20 border-2 border-red-500 text-red-400 hover:bg-red-500/30" : "btn-primary"}`}>
               {myPlayerState?.is_ready ? "Cancel Ready" : "I'm Ready!"}
             </button>
           )}
 
           {isHost && (
             <div className="space-y-3">
-              <button
-                disabled={!allReady || startingGame}
-                onClick={handleStartGame}
-                className="w-full btn-primary py-4 text-lg flex items-center justify-center gap-2"
-              >
+              <button disabled={!allReady || startingGame} onClick={handleStartGame} className="w-full btn-primary py-4 text-lg flex items-center justify-center gap-2">
                 {startingGame ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Play className="w-5 h-5 fill-current" /> Start Game</>}
               </button>
               {!allReady && (
-                <p className="text-xs text-center text-textMuted">
-                  *Membutuhkan minimal 2 pemain dan semua pemain harus dalam status <strong>Ready</strong> untuk memulai.
-                </p>
+                <p className="text-xs text-center text-textMuted">*Membutuhkan minimal 2 pemain dan semua pemain harus dalam status <strong>Ready</strong> untuk memulai.</p>
               )}
             </div>
           )}
@@ -452,11 +413,7 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
   return (
     <>
       {mainContent}
-
-      {/* OVERLAY EMOTE MULTIPLAYER REALTIME */}
-      {roomId && currentUserId && (
-        <EmoteOverlay roomId={roomId} username={currentUsername} />
-      )}
+      {roomId && currentUserId && <EmoteOverlay roomId={roomId} username={currentUsername} />}
     </>
   );
 }
