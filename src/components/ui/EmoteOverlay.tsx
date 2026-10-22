@@ -1,59 +1,39 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
+import { MessageSquare, Send, X } from "lucide-react";
+import VoiceChat from "@/components/ui/VoiceChat";
 import { sounds } from "@/lib/audio";
-import { MessageSquare } from "lucide-react";
 
-interface FloatingItem {
-  id: string;
-  type: "emote" | "chat";
-  content: string;
+interface Props {
+  roomId: string;
+  currentUserId: string;
   username: string;
-  x: number;
 }
 
-const EMOTE_LIST = ["🔥", "😂", "😱", "💩", "👑", "👏"];
-const CHAT_PRESETS = [
-  "Wkwk ngakak! 🤣",
-  "Beneran nih? 🤔",
-  "Gas cepetan woy! ⚡",
-  "Bohong tuh! 🤥",
-  "Hoki doang! 😜",
-  "GG WP! 🔥",
-];
+const EMOTES = ["🔥", "😂", "😱", "💩", "👑", "👏"];
 
-export default function EmoteOverlay({ roomId, username }: { roomId: string; username: string }) {
+export default function EmoteOverlay({ roomId, currentUserId, username }: Props) {
   const supabase = createClient();
-  const [floatingItems, setFloatingItems] = useState<FloatingItem[]>([]);
-  const [showChatMenu, setShowChatMenu] = useState(false);
+  const [messages, setMessages] = useState<{ id: string; text: string; username: string; type: "emote" | "chat" }[]>([]);
+  const [showChatInput, setShowChatInput] = useState(false);
+  const [chatText, setChatText] = useState("");
 
   useEffect(() => {
     if (!roomId) return;
 
-    // Supabase Realtime Broadcast Channel (Super Cepat)
-    const channel = supabase.channel(`room_emotes_${roomId}`, {
-      config: { broadcast: { ack: false } },
-    });
+    const channel = supabase
+      .channel(`room_emotes_${roomId}`)
+      .on("broadcast", { event: "send_emote" }, (payload) => {
+        const { text, username: senderName, type } = payload.payload;
+        const id = Math.random().toString();
+        setMessages((prev) => [...prev, { id, text, username: senderName, type }]);
 
-    channel
-      .on("broadcast", { event: "reaction" }, (payload) => {
-        sounds.playClick();
-        const newItem: FloatingItem = {
-          id: `${Date.now()}-${Math.random()}`,
-          type: payload.payload.type,
-          content: payload.payload.content,
-          username: payload.payload.username,
-          x: Math.floor(Math.random() * 60) + 20, // Posisi acak 20% - 80%
-        };
-
-        setFloatingItems((prev) => [...prev, newItem]);
-
-        // Hapus item otomatis setelah animasi 2.5 detik
         setTimeout(() => {
-          setFloatingItems((prev) => prev.filter((e) => e.id !== newItem.id));
-        }, 2500);
+          setMessages((prev) => prev.filter((m) => m.id !== id));
+        }, 3000);
       })
       .subscribe();
 
@@ -62,101 +42,106 @@ export default function EmoteOverlay({ roomId, username }: { roomId: string; use
     };
   }, [roomId]);
 
-  const sendReaction = async (type: "emote" | "chat", content: string) => {
+  const sendEmoteOrChat = async (text: string, type: "emote" | "chat") => {
     sounds.playClick();
-    setShowChatMenu(false);
     const channel = supabase.channel(`room_emotes_${roomId}`);
     await channel.send({
       type: "broadcast",
-      event: "reaction",
-      payload: { type, content, username },
+      event: "send_emote",
+      payload: { text, username, type },
     });
+  };
+
+  const handleChatSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatText.trim()) return;
+    sendEmoteOrChat(chatText.trim(), "chat");
+    setChatText("");
+    setShowChatInput(false);
   };
 
   return (
     <>
-      {/* ANIMASI FLOATING REACTION (EMOJI & QUICK CHAT) */}
-      <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
+      {/* BUBBLE PESAN / EMOTE DI LAYAR */}
+      <div className="fixed inset-0 pointer-events-none z-50 flex flex-col items-center justify-center space-y-3 overflow-hidden">
         <AnimatePresence>
-          {floatingItems.map((item) => (
+          {messages.map((m) => (
             <motion.div
-              key={item.id}
-              initial={{ opacity: 0, y: "85vh", scale: 0.6 }}
-              animate={{ opacity: 1, y: "25vh", scale: 1 }}
-              exit={{ opacity: 0, scale: 0.3 }}
-              transition={{ duration: 2.2, ease: "easeOut" }}
-              style={{ left: `${item.x}%` }}
-              className="absolute flex flex-col items-center"
+              key={m.id}
+              initial={{ opacity: 0, scale: 0.5, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.8, y: -20 }}
+              className="bg-black/80 backdrop-blur-md border border-white/20 px-4 py-2 rounded-2xl shadow-2xl flex items-center gap-2"
             >
-              {item.type === "emote" ? (
-                <span className="text-4xl drop-shadow-[0_0_12px_rgba(255,255,255,0.6)]">
-                  {item.content}
-                </span>
-              ) : (
-                <div className="bg-primary/90 text-white border border-primary/50 backdrop-blur-md px-4 py-2 rounded-2xl shadow-[0_0_20px_rgba(139,92,246,0.5)] font-bold text-sm whitespace-nowrap">
-                  "{item.content}"
-                </div>
-              )}
-
-              <span className="text-[10px] bg-black/70 backdrop-blur-md border border-white/10 px-2 py-0.5 rounded-full text-textMuted font-semibold mt-1">
-                {item.username}
-              </span>
+              <span className="text-xs font-bold text-secondary">{m.username}:</span>
+              <span className={m.type === "emote" ? "text-2xl" : "text-sm text-white font-medium"}>{m.text}</span>
             </motion.div>
           ))}
         </AnimatePresence>
       </div>
 
-      {/* DOCK BAR REAKSI (EMOTE + QUICK CHAT POPUP) */}
-      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-2">
-        {/* POPUP MENU QUICK CHAT */}
-        <AnimatePresence>
-          {showChatMenu && (
-            <motion.div
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.95 }}
-              className="bg-black/80 backdrop-blur-lg border border-white/15 p-3 rounded-2xl grid grid-cols-2 gap-2 shadow-2xl max-w-xs"
-            >
-              {CHAT_PRESETS.map((msg) => (
-                <button
-                  key={msg}
-                  onClick={() => sendReaction("chat", msg)}
-                  className="text-xs bg-white/5 hover:bg-white/15 border border-white/10 text-white font-medium p-2 rounded-xl text-left transition-all active:scale-95"
-                >
-                  {msg}
-                </button>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
+      {/* DOCK BAR MELAYANG BAWAH (VOICE CHAT + CHAT + EMOTE) */}
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 bg-black/70 backdrop-blur-xl border border-white/15 px-3 py-2 rounded-2xl shadow-2xl max-w-[95vw] overflow-x-auto">
+        {/* TOMBOL VOICE CHAT REALTIME */}
+        <VoiceChat roomId={roomId} currentUserId={currentUserId} />
 
-        {/* DOCK BAR */}
-        <div className="bg-black/70 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-2xl flex items-center gap-2 shadow-2xl">
-          <button
-            onClick={() => { sounds.playClick(); setShowChatMenu((prev) => !prev); }}
-            className={`p-2 rounded-xl border text-xs font-bold flex items-center gap-1 transition-all ${
-              showChatMenu ? "bg-primary text-white border-primary" : "bg-white/10 text-textMuted border-white/10 hover:text-white"
-            }`}
-            title="Pesan Cepat"
-          >
-            <MessageSquare className="w-4 h-4" />
-            <span className="hidden sm:inline">Pesan</span>
-          </button>
+        <div className="w-[1px] h-6 bg-white/20 mx-0.5" />
 
-          <div className="w-[1px] h-6 bg-white/10 mx-1" />
+        {/* TOMBOL PESAN CHAT */}
+        <button
+          onClick={() => { sounds.playClick(); setShowChatInput(!showChatInput); }}
+          className="px-3 py-2 bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all text-white whitespace-nowrap"
+        >
+          <MessageSquare className="w-4 h-4 text-secondary" />
+          <span>Pesan</span>
+        </button>
 
-          {EMOTE_LIST.map((emoji) => (
+        {/* QUICK EMOTES */}
+        <div className="flex items-center gap-1">
+          {EMOTES.map((emoji) => (
             <button
               key={emoji}
-              onClick={() => sendReaction("emote", emoji)}
-              className="text-lg hover:scale-125 active:scale-90 transition-transform p-1 hover:bg-white/10 rounded-xl"
-              title={`Kirim ${emoji}`}
+              onClick={() => sendEmoteOrChat(emoji, "emote")}
+              className="p-1.5 hover:bg-white/15 rounded-xl text-lg transition-transform hover:scale-125 active:scale-90"
             >
               {emoji}
             </button>
           ))}
         </div>
       </div>
+
+      {/* INPUT MODAL PESAN */}
+      {showChatInput && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
+          <motion.form
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            onSubmit={handleChatSubmit}
+            className="glass-panel p-4 w-full max-w-md space-y-3 relative"
+          >
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-bold text-textMuted uppercase">Kirim Pesan Singkat</span>
+              <button type="button" onClick={() => setShowChatInput(false)} className="p-1 hover:bg-white/10 rounded-lg">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                autoFocus
+                maxLength={50}
+                value={chatText}
+                onChange={(e) => setChatText(e.target.value)}
+                placeholder="Ketik pesan..."
+                className="input-neon text-xs flex-1"
+              />
+              <button type="submit" className="btn-primary px-4 py-2 text-xs flex items-center gap-1">
+                <Send className="w-3.5 h-3.5" /> Kirim
+              </button>
+            </div>
+          </motion.form>
+        </div>
+      )}
     </>
   );
 }

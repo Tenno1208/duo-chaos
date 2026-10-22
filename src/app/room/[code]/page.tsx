@@ -21,7 +21,6 @@ import ImpostorWordGame from "@/modules/games/impostor-word/component";
 import DoodleGuessGame from "@/modules/games/doodle-guess/component";
 
 import EmoteOverlay from "@/components/ui/EmoteOverlay";
-import VoiceChat from "@/components/ui/VoiceChat";
 import { sounds } from "@/lib/audio";
 
 interface Player {
@@ -605,16 +604,10 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
 
   return (
     <>
-      {/* FLOATING VOICE CHAT BAR (Selalu tampil di pojok kanan atas untuk SEMUA player & SEMUA status game) */}
-      {roomId && currentUserId && (
-        <div className="fixed top-20 right-3 sm:right-6 z-40">
-          <VoiceChat roomId={roomId} currentUserId={currentUserId} />
-        </div>
-      )}
-
       {mainContent}
-
-      {roomId && currentUserId && <EmoteOverlay roomId={roomId} username={currentUsername} />}
+      {roomId && currentUserId && (
+        <EmoteOverlay roomId={roomId} currentUserId={currentUserId} username={currentUsername} />
+      )}
     </>
   );
 }
