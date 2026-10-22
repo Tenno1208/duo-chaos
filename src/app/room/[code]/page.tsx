@@ -91,7 +91,6 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
     initRoom();
   }, [roomCode]);
 
-  // PEMUTAR BGM OTOMATIS BERDASARKAN STATUS ROOM
   useEffect(() => {
     if (status === "waiting") {
       sounds.startBGM("lobby");
@@ -391,11 +390,6 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* TOMBOL VOICE CHAT REALTIME */}
-            {roomId && currentUserId && (
-              <VoiceChat roomId={roomId} currentUserId={currentUserId} />
-            )}
-
             <span className="text-sm bg-white/5 border border-white/10 px-3 py-2 rounded-xl">
               <strong className="text-white">{players.length}</strong>/{maxPlayers}
             </span>
@@ -611,7 +605,15 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
 
   return (
     <>
+      {/* FLOATING VOICE CHAT BAR (Selalu tampil di pojok kanan atas untuk SEMUA player & SEMUA status game) */}
+      {roomId && currentUserId && (
+        <div className="fixed top-20 right-3 sm:right-6 z-40">
+          <VoiceChat roomId={roomId} currentUserId={currentUserId} />
+        </div>
+      )}
+
       {mainContent}
+
       {roomId && currentUserId && <EmoteOverlay roomId={roomId} username={currentUsername} />}
     </>
   );
