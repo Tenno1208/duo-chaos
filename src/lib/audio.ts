@@ -1,6 +1,8 @@
 class SoundSystem {
   private ctx: AudioContext | null = null;
   public isMuted: boolean = false;
+  public bgmVolume: number = 0.3;
+  public sfxVolume: number = 0.8;
   private bgmInterval: any = null;
 
   private init() {
@@ -10,13 +12,20 @@ class SoundSystem {
     }
   }
 
+  setBGMVolume(vol: number) {
+    this.bgmVolume = vol;
+  }
+
+  setSFXVolume(vol: number) {
+    this.sfxVolume = vol;
+  }
+
   toggleMute() {
     this.isMuted = !this.isMuted;
     if (this.isMuted) this.stopBGM();
     return this.isMuted;
   }
 
-  // SYSTEM BGM SYNTHESIZER
   startBGM(type: "lobby" | "game") {
     if (this.isMuted) return;
     this.stopBGM();
@@ -27,14 +36,14 @@ class SoundSystem {
     let noteIdx = 0;
 
     this.bgmInterval = setInterval(() => {
-      if (this.isMuted || !this.ctx) return;
+      if (this.isMuted || !this.ctx || this.bgmVolume <= 0) return;
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
 
       osc.type = type === "lobby" ? "sine" : "sawtooth";
       osc.frequency.setValueAtTime(notes[noteIdx % notes.length], this.ctx.currentTime);
 
-      gain.gain.setValueAtTime(0.02, this.ctx.currentTime);
+      gain.gain.setValueAtTime(this.bgmVolume * 0.1, this.ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.4);
 
       osc.connect(gain);
@@ -55,7 +64,7 @@ class SoundSystem {
   }
 
   playClick() {
-    if (this.isMuted) return;
+    if (this.isMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
     
@@ -66,7 +75,7 @@ class SoundSystem {
     osc.frequency.setValueAtTime(600, this.ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(800, this.ctx.currentTime + 0.05);
     
-    gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+    gain.gain.setValueAtTime(this.sfxVolume * 0.2, this.ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
     
     osc.connect(gain);
@@ -77,7 +86,7 @@ class SoundSystem {
   }
 
   playVictory() {
-    if (this.isMuted) return;
+    if (this.isMuted || this.sfxVolume <= 0) return;
     this.init();
     if (!this.ctx) return;
 
@@ -90,7 +99,7 @@ class SoundSystem {
       osc.type = "sine";
       osc.frequency.setValueAtTime(freq, startTime);
 
-      gain.gain.setValueAtTime(0.2, startTime);
+      gain.gain.setValueAtTime(this.sfxVolume * 0.3, startTime);
       gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.25);
 
       osc.connect(gain);
