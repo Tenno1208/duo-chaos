@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
-import { Copy, Check, Crown, LogOut, Play, ShieldAlert, Loader2, Swords, BrainCircuit, Zap, Vote, UserX, Palette, RotateCcw, Home } from "lucide-react";
+import { Copy, Check, Crown, LogOut, Play, ShieldAlert, Loader2, Swords, BrainCircuit, Zap, Vote, UserX, Palette, RotateCcw, Home, Sliders, Timer, Hash } from "lucide-react";
 
 import { startTruthOrDare, TruthOrDareState } from "@/modules/games/truth-or-dare/actions";
 import { startMindReader, MindReaderState } from "@/modules/games/mind-reader/actions";
@@ -45,6 +45,10 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
   const [currentGameId, setCurrentGameId] = useState<string | null>("truth-or-dare");
   const [gameState, setGameState] = useState<any>({});
 
+  // STATE CUSTOM ROOM RULES
+  const [maxRounds, setMaxRounds] = useState<number>(3);
+  const [roundTimer, setRoundTimer] = useState<number>(15);
+
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [startingGame, setStartingGame] = useState(false);
@@ -61,7 +65,7 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
 
       const { data: room, error: roomErr } = await supabase
         .from("rooms")
-        .select("id, host_id, max_players, status, current_game_id, game_state")
+        .select("id, host_id, max_players, status, current_game_id, game_state, max_rounds, round_timer")
         .eq("code", roomCode)
         .single();
 
@@ -77,6 +81,8 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
       setStatus(room.status);
       if (room.current_game_id) setCurrentGameId(room.current_game_id);
       setGameState(room.game_state || {});
+      if (room.max_rounds) setMaxRounds(room.max_rounds);
+      if (room.round_timer) setRoundTimer(room.round_timer);
 
       fetchPlayers(room.id);
       setLoading(false);
@@ -117,6 +123,8 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
           setStatus(payload.new.status);
           setCurrentGameId(payload.new.current_game_id);
           setGameState(payload.new.game_state);
+          if (payload.new.max_rounds) setMaxRounds(payload.new.max_rounds);
+          if (payload.new.round_timer) setRoundTimer(payload.new.round_timer);
         }
       )
       .subscribe();
@@ -164,6 +172,18 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
     navigator.clipboard.writeText(roomCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const updateRoomRules = async (newRounds: number, newTimer: number) => {
+    sounds.playClick();
+    if (!roomId) return;
+    setMaxRounds(newRounds);
+    setRoundTimer(newTimer);
+
+    await supabase
+      .from("rooms")
+      .update({ max_rounds: newRounds, round_timer: newTimer })
+      .eq("id", roomId);
   };
 
   const toggleReady = async () => {
@@ -333,7 +353,8 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
     );
   } else {
     mainContent = (
-      <div className="max-w-2xl mx-auto space-y-8 py-6">
+      <div className="max-w-2xl mx-auto space-y-6 py-6">
+        {/* ROOM HEADER */}
         <div className="glass-panel p-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div>
             <span className="text-xs uppercase tracking-widest text-textMuted">Room Code</span>
@@ -367,6 +388,7 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
           </div>
         </div>
 
+        {/* LOBBY MEMBERS */}
         <div className="space-y-4">
           <h2 className="text-lg font-bold text-textMuted px-1">Lobby Members</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -411,6 +433,77 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
           </div>
         </div>
 
+        {/* CUSTOM ROOM RULES SECTION */}
+        <div className="glass-panel p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Sliders className="w-4 h-4 text-primary" /> Aturan Pertandingan
+            </h3>
+            {!isHost && (
+              <span className="text-xs text-textMuted italic">*Hanya Host yang bisa merubah aturan</span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* SETTING JUMLAH RONDE */}
+            <div className="space-y-2">
+              <label className="text-xs text-textMuted font-semibold flex items-center gap-1">
+                <Hash className="w-3.5 h-3.5 text-secondary" /> Total Ronde: <strong className="text-white">{maxRounds} Ronde</strong>
+              </label>
+              {isHost ? (
+                <div className="flex gap-2">
+                  {[3, 5, 10].map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => updateRoomRules(r, roundTimer)}
+                      className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all ${
+                        maxRounds === r
+                          ? "bg-primary/20 border-primary text-white shadow-[0_0_10px_rgba(139,92,246,0.3)]"
+                          : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
+                      }`}
+                    >
+                      {r} Ronde
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white">
+                  {maxRounds} Ronde
+                </div>
+              )}
+            </div>
+
+            {/* SETTING TIMER PER SOAL */}
+            <div className="space-y-2">
+              <label className="text-xs text-textMuted font-semibold flex items-center gap-1">
+                <Timer className="w-3.5 h-3.5 text-yellow-400" /> Timer Per Soal: <strong className="text-white">{roundTimer} Detik</strong>
+              </label>
+              {isHost ? (
+                <div className="flex gap-2">
+                  {[10, 15, 20, 30].map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => updateRoomRules(maxRounds, t)}
+                      className={`flex-1 py-2 rounded-xl border text-xs font-bold transition-all ${
+                        roundTimer === t
+                          ? "bg-yellow-500/20 border-yellow-400 text-white shadow-[0_0_10px_rgba(234,179,8,0.3)]"
+                          : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
+                      }`}
+                    >
+                      {t}s
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white">
+                  {roundTimer} Detik
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* PILIHAN MINI-GAME (HOST ONLY) */}
         {isHost && (
           <div className="space-y-3">
             <label className="text-sm text-textMuted font-bold">Pilih Mini-Game</label>
@@ -478,6 +571,7 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
           </div>
         )}
 
+        {/* CONTROLS START / READY */}
         <div className="glass-panel p-6 space-y-4">
           {!isHost && (
             <button onClick={toggleReady} className={`w-full py-4 text-lg rounded-xl font-bold transition-all ${myPlayerState?.is_ready ? "bg-red-500/20 border-2 border-red-500 text-red-400 hover:bg-red-500/30" : "btn-primary"}`}>

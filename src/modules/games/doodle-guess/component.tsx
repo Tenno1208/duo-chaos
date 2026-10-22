@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
 import { DoodleGuessState, submitDoodleGuess, nextDoodleRound } from "./actions";
-import { Palette, Eraser, Award, ArrowRight, Loader2, Check, Send } from "lucide-react";
+import { Palette, Eraser, Award, ArrowRight, Loader2, Send } from "lucide-react";
 import { sounds } from "@/lib/audio";
 
 interface Props {
@@ -19,6 +19,8 @@ export default function DoodleGuessGame({ roomId, currentUserId, hostId, gameSta
   const supabase = createClient();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const isDrawingRef = useRef(false);
+  const lastPosRef = useRef<{ x: number; y: number } | null>(null);
+  const channelRef = useRef<any>(null);
 
   const [guessInput, setGuessInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -28,7 +30,7 @@ export default function DoodleGuessGame({ roomId, currentUserId, hostId, gameSta
 
   const drawerName = players.find((p) => p.player_id === gameState.drawerId)?.profiles?.username || "Penggambar";
 
-  // LISTEN BROADCAST KANVAS REALTIME
+  // INI DAN REUSE CHANNEL REALTIME SUPABASE
   useEffect(() => {
     if (!roomId) return;
 
@@ -38,7 +40,7 @@ export default function DoodleGuessGame({ roomId, currentUserId, hostId, gameSta
 
     channel
       .on("broadcast", { event: "draw" }, (payload) => {
-        if (isDrawer) return; // Penggambar tidak perlu menggambar ulang dari broadcast dirinya sendiri
+        if (isDrawer) return;
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext("2d");
@@ -58,6 +60,8 @@ export default function DoodleGuessGame({ roomId, currentUserId, hostId, gameSta
       })
       .subscribe();
 
+    channelRef.current = channel;
+
     return () => {
       supabase.removeChannel(channel);
     };
@@ -73,11 +77,23 @@ export default function DoodleGuessGame({ roomId, currentUserId, hostId, gameSta
   const handleClearCanvas = async () => {
     sounds.playClick();
     clearCanvasLocal();
-    const channel = supabase.channel(`room_doodle_${roomId}`);
-    await channel.send({ type: "broadcast", event: "clear", payload: {} });
+    if (channelRef.current) {
+      await channelRef.current.send({ type: "broadcast", event: "clear", payload: {} });
+    }
   };
 
-  // HANDLER AKSI MOUSE/TOUCH PENGGAMBAR
+  const getCanvasPos = (e: any) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.touches && e.touches.length > 0 ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches && e.touches.length > 0 ? e.touches[0].clientY : e.clientY;
+    return {
+      x: clientX - rect.left,
+      y: clientY - rect.top,
+    };
+  };
+
   const drawLine = (x0: number, y0: number, x1: number, y1: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -92,43 +108,37 @@ export default function DoodleGuessGame({ roomId, currentUserId, hostId, gameSta
     ctx.lineTo(x1, y1);
     ctx.stroke();
 
-    // Broadcast koordinat relatif (0.0 - 1.0) ke pemain lain
-    const channel = supabase.channel(`room_doodle_${roomId}`);
-    channel.send({
-      type: "broadcast",
-      event: "draw",
-      payload: {
-        x0: x0 / canvas.width,
-        y0: y0 / canvas.height,
-        x1: x1 / canvas.width,
-        y1: y1 / canvas.height,
-        color: "#8b5cf6",
-      },
-    });
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: "broadcast",
+        event: "draw",
+        payload: {
+          x0: x0 / canvas.width,
+          y0: y0 / canvas.height,
+          x1: x1 / canvas.width,
+          y1: y1 / canvas.height,
+          color: "#8b5cf6",
+        },
+      });
+    }
   };
 
   const startDraw = (e: any) => {
     if (!isDrawer || gameState.phase !== "drawing") return;
     isDrawingRef.current = true;
+    lastPosRef.current = getCanvasPos(e);
   };
 
   const drawMove = (e: any) => {
-    if (!isDrawer || !isDrawingRef.current || gameState.phase !== "drawing") return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
-    const currentX = clientX - rect.left;
-    const currentY = clientY - rect.top;
-
-    drawLine(currentX, currentY, currentX, currentY);
+    if (!isDrawer || !isDrawingRef.current || gameState.phase !== "drawing" || !lastPosRef.current) return;
+    const currentPos = getCanvasPos(e);
+    drawLine(lastPosRef.current.x, lastPosRef.current.y, currentPos.x, currentPos.y);
+    lastPosRef.current = currentPos;
   };
 
   const stopDraw = () => {
     isDrawingRef.current = false;
+    lastPosRef.current = null;
   };
 
   const handleGuessSubmit = async (e: React.FormEvent) => {
@@ -197,6 +207,7 @@ export default function DoodleGuessGame({ roomId, currentUserId, hostId, gameSta
             onMouseDown={startDraw}
             onMouseMove={drawMove}
             onMouseUp={stopDraw}
+            onMouseLeave={stopDraw}
             onTouchStart={startDraw}
             onTouchMove={drawMove}
             onTouchEnd={stopDraw}
@@ -214,7 +225,7 @@ export default function DoodleGuessGame({ roomId, currentUserId, hostId, gameSta
         )}
       </div>
 
-      {/* INPUT TEBAKAN (PENEBAK) */}
+      {/* INPUT TEBAKAN */}
       {!isDrawer && (
         <div className="glass-panel p-4 space-y-3">
           {hasSolved ? (
@@ -239,7 +250,7 @@ export default function DoodleGuessGame({ roomId, currentUserId, hostId, gameSta
         </div>
       )}
 
-      {/* AKSI HOST KETIKA PHASE REVEAL */}
+      {/* REVEAL PHASE */}
       {gameState.phase === "reveal" && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-panel p-6 text-center space-y-3">
           <h3 className="text-lg font-bold text-white">Ronde Selesai!</h3>
