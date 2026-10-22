@@ -4,17 +4,21 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
-import { Copy, Check, Crown, LogOut, Play, ShieldAlert, Loader2, Swords, BrainCircuit, Zap, Vote, RotateCcw, Home } from "lucide-react";
+import { Copy, Check, Crown, LogOut, Play, ShieldAlert, Loader2, Swords, BrainCircuit, Zap, Vote, UserX, Palette, RotateCcw, Home } from "lucide-react";
 
 import { startTruthOrDare, TruthOrDareState } from "@/modules/games/truth-or-dare/actions";
 import { startMindReader, MindReaderState } from "@/modules/games/mind-reader/actions";
 import { startSpeedBattle, SpeedBattleState } from "@/modules/games/speed-battle/actions";
 import { startMostLikelyTo, MostLikelyToState } from "@/modules/games/most-likely-to/actions";
+import { startImpostorWord, ImpostorWordState } from "@/modules/games/impostor-word/actions";
+import { startDoodleGuess, DoodleGuessState } from "@/modules/games/doodle-guess/actions";
 
 import TruthOrDareGame from "@/modules/games/truth-or-dare/component";
 import MindReaderGame from "@/modules/games/mind-reader/component";
 import SpeedBattleGame from "@/modules/games/speed-battle/component";
 import MostLikelyToGame from "@/modules/games/most-likely-to/component";
+import ImpostorWordGame from "@/modules/games/impostor-word/component";
+import DoodleGuessGame from "@/modules/games/doodle-guess/component";
 
 import EmoteOverlay from "@/components/ui/EmoteOverlay";
 import { sounds } from "@/lib/audio";
@@ -195,6 +199,10 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
         await startSpeedBattle(roomId, players);
       } else if (currentGameId === "most-likely-to") {
         await startMostLikelyTo(roomId, players);
+      } else if (currentGameId === "impostor-word") {
+        await startImpostorWord(roomId, players);
+      } else if (currentGameId === "doodle-guess") {
+        await startDoodleGuess(roomId, players);
       }
     } catch (err: any) {
       alert(err.message);
@@ -269,6 +277,14 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
     mainContent = (
       <MostLikelyToGame roomId={roomId} currentUserId={currentUserId} hostId={hostId} gameState={gameState as MostLikelyToState} players={players} />
     );
+  } else if (status === "playing" && currentGameId === "impostor-word" && roomId && currentUserId && hostId) {
+    mainContent = (
+      <ImpostorWordGame roomId={roomId} currentUserId={currentUserId} hostId={hostId} gameState={gameState as ImpostorWordState} players={players} />
+    );
+  } else if (status === "playing" && currentGameId === "doodle-guess" && roomId && currentUserId && hostId) {
+    mainContent = (
+      <DoodleGuessGame roomId={roomId} currentUserId={currentUserId} hostId={hostId} gameState={gameState as DoodleGuessState} players={players} />
+    );
   } else if (status === "finished") {
     const scores: Record<string, number> = gameState.scores || {};
     const sortedPlayers = [...players].sort((a, b) => (scores[b.player_id] || 0) - (scores[a.player_id] || 0));
@@ -318,7 +334,6 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
   } else {
     mainContent = (
       <div className="max-w-2xl mx-auto space-y-8 py-6">
-        {/* ROOM HEADER DENGAN TOMBOL SHARE WA */}
         <div className="glass-panel p-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div>
             <span className="text-xs uppercase tracking-widest text-textMuted">Room Code</span>
@@ -399,7 +414,7 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
         {isHost && (
           <div className="space-y-3">
             <label className="text-sm text-textMuted font-bold">Pilih Mini-Game</label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
               <button
                 onClick={() => { sounds.playClick(); setCurrentGameId("truth-or-dare"); }}
                 className={`p-3 rounded-xl border flex flex-col items-center text-center gap-2 transition-all ${
@@ -438,6 +453,26 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
               >
                 <Vote className="w-5 h-5 text-pink-400" />
                 <div className="font-bold text-xs">Most Likely To</div>
+              </button>
+
+              <button
+                onClick={() => { sounds.playClick(); setCurrentGameId("impostor-word"); }}
+                className={`p-3 rounded-xl border flex flex-col items-center text-center gap-2 transition-all ${
+                  currentGameId === "impostor-word" ? "bg-red-500/20 border-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)]" : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
+                }`}
+              >
+                <UserX className="w-5 h-5 text-red-400" />
+                <div className="font-bold text-xs">Detektif Impostor</div>
+              </button>
+
+              <button
+                onClick={() => { sounds.playClick(); setCurrentGameId("doodle-guess"); }}
+                className={`p-3 rounded-xl border flex flex-col items-center text-center gap-2 transition-all ${
+                  currentGameId === "doodle-guess" ? "bg-accent/20 border-accent text-white shadow-[0_0_15px_rgba(217,70,239,0.3)]" : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
+                }`}
+              >
+                <Palette className="w-5 h-5 text-accent" />
+                <div className="font-bold text-xs">Tebak Gambar</div>
               </button>
             </div>
           </div>
