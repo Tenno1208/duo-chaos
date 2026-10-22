@@ -14,6 +14,9 @@ import TruthOrDareGame from "@/modules/games/truth-or-dare/component";
 import MindReaderGame from "@/modules/games/mind-reader/component";
 import SpeedBattleGame from "@/modules/games/speed-battle/component";
 
+import EmoteOverlay from "@/components/ui/EmoteOverlay";
+import { sounds } from "@/lib/audio";
+
 interface Player {
   player_id: string;
   is_ready: boolean;
@@ -41,6 +44,7 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
   const [startingGame, setStartingGame] = useState(false);
   const [error, setError] = useState("");
 
+  // 1. Inisialisasi Room & User Session
   useEffect(() => {
     async function initRoom() {
       const { data: { session } } = await supabase.auth.getSession();
@@ -76,6 +80,7 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
     initRoom();
   }, [roomCode]);
 
+  // Fetch Daftar Pemain
   async function fetchPlayers(rId: string) {
     const { data } = await supabase
       .from("room_players")
@@ -87,6 +92,7 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
     }
   }
 
+  // 2. Langganan Supabase Realtime (Pemain & Room State)
   useEffect(() => {
     if (!roomId) return;
 
@@ -118,14 +124,13 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
     };
   }, [roomId]);
 
-  // =========================================================
-  // PENAMBAHAN: UPDATE STATISTIK XP & WIN KETIKA GAME SELESAI
-  // =========================================================
+  // 3. Update Statistik XP, Match, Wins & Panggil Suara Kemenangan saat Game Selesai
   useEffect(() => {
     async function updatePlayerStats() {
       if (status === "finished" && currentUserId && gameState.scores) {
+        sounds.playVictory();
+
         const myScore = gameState.scores[currentUserId] || 0;
-        
         const allScores = Object.values(gameState.scores) as number[];
         const maxScore = Math.max(...allScores, 0);
         const isWinner = myScore === maxScore && myScore > 0;
@@ -153,12 +158,14 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
   }, [status]);
 
   const copyCode = () => {
+    sounds.playClick();
     navigator.clipboard.writeText(roomCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const toggleReady = async () => {
+    sounds.playClick();
     if (!roomId || !currentUserId) return;
     const currentPlayer = players.find((p) => p.player_id === currentUserId);
     if (!currentPlayer) return;
@@ -171,12 +178,14 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
   };
 
   const leaveRoom = async () => {
+    sounds.playClick();
     if (!roomId || !currentUserId) return;
     await supabase.from("room_players").delete().eq("room_id", roomId).eq("player_id", currentUserId);
     router.push("/");
   };
 
   const handleStartGame = async () => {
+    sounds.playClick();
     if (!roomId || !currentGameId) return;
     setStartingGame(true);
     try {
@@ -213,9 +222,16 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
     );
   }
 
-  // ARENA GAME 1: TRUTH OR DARE
+  const isHost = currentUserId === hostId;
+  const myPlayerState = players.find((p) => p.player_id === currentUserId);
+  const allReady = players.length >= 2 && players.every((p) => p.is_ready);
+  const currentUsername = players.find((p) => p.player_id === currentUserId)?.profiles?.username || "Pemain";
+
+  // MENENTUKAN TAMPILAN UTAMA
+  let mainContent;
+
   if (status === "playing" && currentGameId === "truth-or-dare" && roomId && currentUserId) {
-    return (
+    mainContent = (
       <TruthOrDareGame
         roomId={roomId}
         currentUserId={currentUserId}
@@ -223,11 +239,8 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
         players={players}
       />
     );
-  }
-
-  // ARENA GAME 2: MIND READER
-  if (status === "playing" && currentGameId === "mind-reader" && roomId && currentUserId && hostId) {
-    return (
+  } else if (status === "playing" && currentGameId === "mind-reader" && roomId && currentUserId && hostId) {
+    mainContent = (
       <MindReaderGame
         roomId={roomId}
         currentUserId={currentUserId}
@@ -236,11 +249,8 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
         players={players}
       />
     );
-  }
-
-  // ARENA GAME 3: SPEED BATTLE
-  if (status === "playing" && currentGameId === "speed-battle" && roomId && currentUserId && hostId) {
-    return (
+  } else if (status === "playing" && currentGameId === "speed-battle" && roomId && currentUserId && hostId) {
+    mainContent = (
       <SpeedBattleGame
         roomId={roomId}
         currentUserId={currentUserId}
@@ -249,14 +259,11 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
         players={players}
       />
     );
-  }
-
-  // GAME RESULT PAGE
-  if (status === "finished") {
+  } else if (status === "finished") {
     const scores: Record<string, number> = gameState.scores || {};
     const sortedPlayers = [...players].sort((a, b) => (scores[b.player_id] || 0) - (scores[a.player_id] || 0));
 
-    return (
+    mainContent = (
       <div className="max-w-md mx-auto glass-panel p-8 text-center space-y-6">
         <div className="p-4 bg-yellow-500/20 text-yellow-400 rounded-full w-20 h-20 mx-auto flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.3)]">
           <Crown className="w-10 h-10" />
@@ -280,169 +287,176 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
         </button>
       </div>
     );
-  }
+  } else {
+    // TAMPILAN LOBBY (WAITING)
+    mainContent = (
+      <div className="max-w-2xl mx-auto space-y-8 py-6">
+        {/* ROOM HEADER */}
+        <div className="glass-panel p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div>
+            <span className="text-xs uppercase tracking-widest text-textMuted">Room Code</span>
+            <div className="flex items-center gap-3 mt-1">
+              <h1 className="text-4xl font-extrabold tracking-widest text-secondary">{roomCode}</h1>
+              <button onClick={copyCode} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-textMuted hover:text-white">
+                {copied ? <Check className="w-5 h-5 text-green-400" /> : <Copy className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
 
-  // LOBBY (WAITING)
-  const isHost = currentUserId === hostId;
-  const myPlayerState = players.find((p) => p.player_id === currentUserId);
-  const allReady = players.length >= 2 && players.every((p) => p.is_ready);
-
-  return (
-    <div className="max-w-2xl mx-auto space-y-8 py-6">
-      {/* ROOM HEADER */}
-      <div className="glass-panel p-6 flex flex-col md:flex-row items-center justify-between gap-4">
-        <div>
-          <span className="text-xs uppercase tracking-widest text-textMuted">Room Code</span>
-          <div className="flex items-center gap-3 mt-1">
-            <h1 className="text-4xl font-extrabold tracking-widest text-secondary">{roomCode}</h1>
-            <button onClick={copyCode} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-textMuted hover:text-white">
-              {copied ? <Check className="w-5 h-5 text-green-400" /> : <Copy className="w-5 h-5" />}
+          <div className="flex items-center gap-3">
+            <span className="text-sm bg-white/5 border border-white/10 px-4 py-2 rounded-xl">
+              Pemain: <strong className="text-white">{players.length}</strong> / {maxPlayers}
+            </span>
+            <button onClick={leaveRoom} className="p-3 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl transition-colors">
+              <LogOut className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-sm bg-white/5 border border-white/10 px-4 py-2 rounded-xl">
-            Pemain: <strong className="text-white">{players.length}</strong> / {maxPlayers}
-          </span>
-          <button onClick={leaveRoom} className="p-3 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl transition-colors">
-            <LogOut className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
+        {/* PLAYERS LIST */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-bold text-textMuted px-1">Lobby Members</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {players.map((p) => {
+              const isPlayerHost = p.player_id === hostId;
+              const isMe = p.player_id === currentUserId;
 
-      {/* PLAYERS LIST */}
-      <div className="space-y-4">
-        <h2 className="text-lg font-bold text-textMuted px-1">Lobby Members</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {players.map((p) => {
-            const isPlayerHost = p.player_id === hostId;
-            const isMe = p.player_id === currentUserId;
-
-            return (
-              <motion.div
-                key={p.player_id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className={`glass-panel p-4 flex items-center justify-between border ${isMe ? "border-primary/50 bg-primary/10" : "border-white/10"}`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center font-bold text-white shadow-md">
-                    {p.profiles?.username?.[0]?.toUpperCase() || "P"}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">{p.profiles?.username}</span>
-                      {isMe && <span className="text-xs text-primary font-medium">(You)</span>}
+              return (
+                <motion.div
+                  key={p.player_id}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className={`glass-panel p-4 flex items-center justify-between border ${isMe ? "border-primary/50 bg-primary/10" : "border-white/10"}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center font-bold text-white shadow-md">
+                      {p.profiles?.username?.[0]?.toUpperCase() || "P"}
                     </div>
-                    {isPlayerHost && (
-                      <span className="inline-flex items-center gap-1 text-xs text-yellow-400 font-medium">
-                        <Crown className="w-3 h-3" /> Host
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{p.profiles?.username}</span>
+                        {isMe && <span className="text-xs text-primary font-medium">(You)</span>}
+                      </div>
+                      {isPlayerHost && (
+                        <span className="inline-flex items-center gap-1 text-xs text-yellow-400 font-medium">
+                          <Crown className="w-3 h-3" /> Host
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    {p.is_ready ? (
+                      <span className="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs font-bold uppercase tracking-wider">
+                        Ready
+                      </span>
+                    ) : (
+                      <span className="px-3 py-1 bg-white/5 text-textMuted border border-white/10 rounded-lg text-xs font-bold uppercase tracking-wider">
+                        Waiting
                       </span>
                     )}
                   </div>
-                </div>
-
-                <div>
-                  {p.is_ready ? (
-                    <span className="px-3 py-1 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-xs font-bold uppercase tracking-wider">
-                      Ready
-                    </span>
-                  ) : (
-                    <span className="px-3 py-1 bg-white/5 text-textMuted border border-white/10 rounded-lg text-xs font-bold uppercase tracking-wider">
-                      Waiting
-                    </span>
-                  )}
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* GAME SELECTION FOR HOST */}
-      {isHost && (
-        <div className="space-y-3">
-          <label className="text-sm text-textMuted font-bold">Pilih Mini-Game</label>
-          <div className="grid grid-cols-3 gap-3">
-            <button
-              onClick={() => setCurrentGameId("truth-or-dare")}
-              className={`p-4 rounded-xl border flex items-center gap-3 transition-all ${
-                currentGameId === "truth-or-dare"
-                  ? "bg-primary/20 border-primary text-white shadow-[0_0_15px_rgba(139,92,246,0.3)]"
-                  : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
-              }`}
-            >
-              <Swords className="w-5 h-5 text-accent" />
-              <div className="text-left">
-                <div className="font-bold text-sm">Truth or Dare</div>
-                <div className="text-xs text-textMuted">Tantangan konyol</div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => setCurrentGameId("mind-reader")}
-              className={`p-4 rounded-xl border flex items-center gap-3 transition-all ${
-                currentGameId === "mind-reader"
-                  ? "bg-secondary/20 border-secondary text-white shadow-[0_0_15px_rgba(6,182,212,0.3)]"
-                  : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
-              }`}
-            >
-              <BrainCircuit className="w-5 h-5 text-secondary" />
-              <div className="text-left">
-                <div className="font-bold text-sm">Mind Reader</div>
-                <div className="text-xs text-textMuted">Cari sefrekuensi</div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => setCurrentGameId("speed-battle")}
-              className={`p-4 rounded-xl border flex items-center gap-3 transition-all ${
-                currentGameId === "speed-battle"
-                  ? "bg-yellow-500/20 border-yellow-400 text-white shadow-[0_0_15px_rgba(234,179,8,0.3)]"
-                  : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
-              }`}
-            >
-              <Zap className="w-5 h-5 text-yellow-400" />
-              <div className="text-left">
-                <div className="font-bold text-sm">Speed Battle</div>
-                <div className="text-xs text-textMuted">Adu cepat kuis</div>
-              </div>
-            </button>
+                </motion.div>
+              );
+            })}
           </div>
         </div>
-      )}
 
-      {/* CONTROLS */}
-      <div className="glass-panel p-6 space-y-4">
-        {!isHost && (
-          <button
-            onClick={toggleReady}
-            className={`w-full py-4 text-lg rounded-xl font-bold transition-all ${
-              myPlayerState?.is_ready ? "bg-red-500/20 border-2 border-red-500 text-red-400 hover:bg-red-500/30" : "btn-primary"
-            }`}
-          >
-            {myPlayerState?.is_ready ? "Cancel Ready" : "I'm Ready!"}
-          </button>
-        )}
-
+        {/* GAME SELECTION FOR HOST */}
         {isHost && (
           <div className="space-y-3">
-            <button
-              disabled={!allReady || startingGame}
-              onClick={handleStartGame}
-              className="w-full btn-primary py-4 text-lg flex items-center justify-center gap-2"
-            >
-              {startingGame ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Play className="w-5 h-5 fill-current" /> Start Game</>}
-            </button>
-            {!allReady && (
-              <p className="text-xs text-center text-textMuted">
-                *Membutuhkan minimal 2 pemain dan semua pemain harus dalam status <strong>Ready</strong> untuk memulai.
-              </p>
-            )}
+            <label className="text-sm text-textMuted font-bold">Pilih Mini-Game</label>
+            <div className="grid grid-cols-3 gap-3">
+              <button
+                onClick={() => { sounds.playClick(); setCurrentGameId("truth-or-dare"); }}
+                className={`p-4 rounded-xl border flex items-center gap-3 transition-all ${
+                  currentGameId === "truth-or-dare"
+                    ? "bg-primary/20 border-primary text-white shadow-[0_0_15px_rgba(139,92,246,0.3)]"
+                    : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
+                }`}
+              >
+                <Swords className="w-5 h-5 text-accent" />
+                <div className="text-left">
+                  <div className="font-bold text-sm">Truth or Dare</div>
+                  <div className="text-xs text-textMuted">Tantangan konyol</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => { sounds.playClick(); setCurrentGameId("mind-reader"); }}
+                className={`p-4 rounded-xl border flex items-center gap-3 transition-all ${
+                  currentGameId === "mind-reader"
+                    ? "bg-secondary/20 border-secondary text-white shadow-[0_0_15px_rgba(6,182,212,0.3)]"
+                    : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
+                }`}
+              >
+                <BrainCircuit className="w-5 h-5 text-secondary" />
+                <div className="text-left">
+                  <div className="font-bold text-sm">Mind Reader</div>
+                  <div className="text-xs text-textMuted">Cari sefrekuensi</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => { sounds.playClick(); setCurrentGameId("speed-battle"); }}
+                className={`p-4 rounded-xl border flex items-center gap-3 transition-all ${
+                  currentGameId === "speed-battle"
+                    ? "bg-yellow-500/20 border-yellow-400 text-white shadow-[0_0_15px_rgba(234,179,8,0.3)]"
+                    : "bg-white/5 border-white/10 text-textMuted hover:bg-white/10"
+                }`}
+              >
+                <Zap className="w-5 h-5 text-yellow-400" />
+                <div className="text-left">
+                  <div className="font-bold text-sm">Speed Battle</div>
+                  <div className="text-xs text-textMuted">Adu cepat kuis</div>
+                </div>
+              </button>
+            </div>
           </div>
         )}
+
+        {/* CONTROLS */}
+        <div className="glass-panel p-6 space-y-4">
+          {!isHost && (
+            <button
+              onClick={toggleReady}
+              className={`w-full py-4 text-lg rounded-xl font-bold transition-all ${
+                myPlayerState?.is_ready ? "bg-red-500/20 border-2 border-red-500 text-red-400 hover:bg-red-500/30" : "btn-primary"
+              }`}
+            >
+              {myPlayerState?.is_ready ? "Cancel Ready" : "I'm Ready!"}
+            </button>
+          )}
+
+          {isHost && (
+            <div className="space-y-3">
+              <button
+                disabled={!allReady || startingGame}
+                onClick={handleStartGame}
+                className="w-full btn-primary py-4 text-lg flex items-center justify-center gap-2"
+              >
+                {startingGame ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Play className="w-5 h-5 fill-current" /> Start Game</>}
+              </button>
+              {!allReady && (
+                <p className="text-xs text-center text-textMuted">
+                  *Membutuhkan minimal 2 pemain dan semua pemain harus dalam status <strong>Ready</strong> untuk memulai.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    );
+  }
+
+  return (
+    <>
+      {mainContent}
+
+      {/* OVERLAY EMOTE MULTIPLAYER REALTIME */}
+      {roomId && currentUserId && (
+        <EmoteOverlay roomId={roomId} username={currentUsername} />
+      )}
+    </>
   );
 }
