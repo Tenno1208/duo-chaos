@@ -1,6 +1,6 @@
-// Helper audio sintetis menggunakan Web Audio API murni (bebas dependency)
 class SoundSystem {
   private ctx: AudioContext | null = null;
+  public isMuted: boolean = false;
 
   private init() {
     if (!this.ctx && typeof window !== "undefined") {
@@ -9,8 +9,13 @@ class SoundSystem {
     }
   }
 
-  // Efek Suara Tombol Klik
+  toggleMute() {
+    this.isMuted = !this.isMuted;
+    return this.isMuted;
+  }
+
   playClick() {
+    if (this.isMuted) return;
     this.init();
     if (!this.ctx) return;
     
@@ -31,8 +36,8 @@ class SoundSystem {
     osc.stop(this.ctx.currentTime + 0.05);
   }
 
-  // Efek Suara Jawaban Benar / Poin
   playSuccess() {
+    if (this.isMuted) return;
     this.init();
     if (!this.ctx) return;
 
@@ -41,9 +46,9 @@ class SoundSystem {
     const gain = this.ctx.createGain();
 
     osc.type = "triangle";
-    osc.frequency.setValueAtTime(523.25, now); // C5
-    osc.frequency.setValueAtTime(659.25, now + 0.08); // E5
-    osc.frequency.setValueAtTime(783.99, now + 0.16); // G5
+    osc.frequency.setValueAtTime(523.25, now);
+    osc.frequency.setValueAtTime(659.25, now + 0.08);
+    osc.frequency.setValueAtTime(783.99, now + 0.16);
 
     gain.gain.setValueAtTime(0.15, now);
     gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
@@ -55,8 +60,8 @@ class SoundSystem {
     osc.stop(now + 0.3);
   }
 
-  // Efek Suara Countdown / Timer
   playTick() {
+    if (this.isMuted) return;
     this.init();
     if (!this.ctx) return;
 
@@ -76,12 +81,12 @@ class SoundSystem {
     osc.stop(this.ctx.currentTime + 0.03);
   }
 
-  // Efek Suara Kemenangan Match
   playVictory() {
+    if (this.isMuted) return;
     this.init();
     if (!this.ctx) return;
 
-    const notes = [523.25, 659.25, 783.99, 1046.50]; // C, E, G, C high
+    const notes = [523.25, 659.25, 783.99, 1046.50];
     notes.forEach((freq, idx) => {
       const osc = this.ctx!.createOscillator();
       const gain = this.ctx!.createGain();

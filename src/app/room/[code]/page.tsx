@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
-import { Copy, Check, Crown, LogOut, Play, ShieldAlert, Loader2, Swords, BrainCircuit, Zap, Vote } from "lucide-react";
+import { Copy, Check, Crown, LogOut, Play, ShieldAlert, Loader2, Swords, BrainCircuit, Zap, Vote, RotateCcw, Home } from "lucide-react";
 
 import { startTruthOrDare, TruthOrDareState } from "@/modules/games/truth-or-dare/actions";
 import { startMindReader, MindReaderState } from "@/modules/games/mind-reader/actions";
@@ -203,6 +203,30 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
     }
   };
 
+  const handleBackToLobby = async () => {
+    sounds.playClick();
+    if (!roomId) return;
+    setStartingGame(true);
+    try {
+      await supabase
+        .from("room_players")
+        .update({ is_ready: false })
+        .eq("room_id", roomId);
+
+      await supabase
+        .from("rooms")
+        .update({
+          status: "waiting",
+          game_state: {},
+        })
+        .eq("id", roomId);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setStartingGame(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh]">
@@ -268,22 +292,53 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
           ))}
         </div>
 
-        <button onClick={() => router.push("/")} className="w-full btn-primary">
-          Kembali ke Menu Utama
-        </button>
+        <div className="space-y-3 pt-2">
+          {isHost ? (
+            <>
+              <button disabled={startingGame} onClick={handleStartGame} className="w-full btn-primary py-3.5 flex items-center justify-center gap-2">
+                {startingGame ? <Loader2 className="w-5 h-5 animate-spin" /> : <><RotateCcw className="w-5 h-5" /> Main Lagi (Rematch)</>}
+              </button>
+              
+              <button disabled={startingGame} onClick={handleBackToLobby} className="w-full btn-secondary py-3.5 flex items-center justify-center gap-2">
+                <Home className="w-5 h-5" /> Kembali ke Lobby
+              </button>
+            </>
+          ) : (
+            <p className="text-sm text-textMuted italic animate-pulse">
+              Menunggu Host memilih rematch atau kembali ke lobby...
+            </p>
+          )}
+
+          <button onClick={leaveRoom} className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl text-xs font-bold transition-all">
+            Keluar Room
+          </button>
+        </div>
       </div>
     );
   } else {
     mainContent = (
       <div className="max-w-2xl mx-auto space-y-8 py-6">
+        {/* ROOM HEADER DENGAN TOMBOL SHARE WA */}
         <div className="glass-panel p-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div>
             <span className="text-xs uppercase tracking-widest text-textMuted">Room Code</span>
             <div className="flex items-center gap-3 mt-1">
               <h1 className="text-4xl font-extrabold tracking-widest text-secondary">{roomCode}</h1>
-              <button onClick={copyCode} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-textMuted hover:text-white">
+              <button onClick={copyCode} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-textMuted hover:text-white" title="Salin Kode">
                 {copied ? <Check className="w-5 h-5 text-green-400" /> : <Copy className="w-5 h-5" />}
               </button>
+
+              <a
+                href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
+                  `Ayo tanding party game bareng aku di DUO CHAOS! 🎮🔥\nMasuk ke room pake kode: *${roomCode}* atau langsung klik link berikut:\n${typeof window !== "undefined" ? window.location.href : ""}`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg transition-all text-xs font-bold flex items-center gap-1"
+                title="Share ke WhatsApp"
+              >
+                <span>WA</span>
+              </a>
             </div>
           </div>
 

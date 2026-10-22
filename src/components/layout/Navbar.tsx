@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Gamepad2, LogIn, LogOut, ShieldCheck, Trophy, ShieldAlert } from "lucide-react";
+import { Gamepad2, LogIn, LogOut, ShieldCheck, Trophy, ShieldAlert, Volume2, VolumeX } from "lucide-react";
+import { sounds } from "@/lib/audio";
 
 interface UserProfile {
   username: string;
@@ -18,12 +19,12 @@ export default function Navbar() {
   const supabase = createClient();
 
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
 
   useEffect(() => {
     async function loadUser() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        // Mengambil username, status guest, dan status admin
         const { data } = await supabase
           .from("profiles")
           .select("username, is_guest, is_admin")
@@ -51,6 +52,11 @@ export default function Navbar() {
     router.push("/");
   };
 
+  const toggleSound = () => {
+    const muted = sounds.toggleMute();
+    setIsMuted(muted);
+  };
+
   if (pathname.startsWith("/room/")) return null;
 
   return (
@@ -68,8 +74,17 @@ export default function Navbar() {
         </Link>
 
         {/* NAVIGASI & AKSI USER */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           
+          {/* TOMBOL MUTE AUDIO */}
+          <button
+            onClick={toggleSound}
+            className="p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-textMuted hover:text-white transition-all shrink-0"
+            title={isMuted ? "Unmute Audio" : "Mute Audio"}
+          >
+            {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-secondary" />}
+          </button>
+
           {/* TOMBOL LEADERBOARD */}
           <Link
             href="/leaderboard"
@@ -80,7 +95,7 @@ export default function Navbar() {
             <span className="hidden md:inline">Leaderboard</span>
           </Link>
 
-          {/* TOMBOL ADMIN PANEL (Hanya tampil jika user is_admin = true) */}
+          {/* TOMBOL ADMIN PANEL */}
           {userProfile?.is_admin && (
             <Link
               href="/admin"

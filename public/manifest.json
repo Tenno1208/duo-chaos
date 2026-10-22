@@ -1,0 +1,16 @@
+{
+  "name": "DUO CHAOS",
+  "short_name": "DuoChaos",
+  "description": "Realtime Party Mini-Games for Friends",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#8b5cf6",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}
