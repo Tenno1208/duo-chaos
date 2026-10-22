@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { motion } from "framer-motion";
-import { ShieldCheck, Trophy, Zap, Award, ShoppingBag, ArrowLeft, Loader2, Check, Sparkles } from "lucide-react";
+import { 
+  ShieldCheck, Trophy, Zap, Award, ShoppingBag, 
+  ArrowLeft, Loader2, Check, Sparkles, History 
+} from "lucide-react";
 import { sounds } from "@/lib/audio";
 
 interface ProfileData {
@@ -16,6 +19,14 @@ interface ProfileData {
   is_guest: boolean;
   title?: string;
   frame_color?: string;
+}
+
+interface MatchLog {
+  id: string;
+  room_code: string;
+  game_id: string;
+  winner_name: string;
+  created_at: string;
 }
 
 const FRAME_ITEMS = [
@@ -37,6 +48,7 @@ export default function ProfilePage() {
   const supabase = createClient();
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [matchLogs, setMatchLogs] = useState<MatchLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
 
@@ -48,19 +60,32 @@ export default function ProfilePage() {
         return;
       }
 
-      const { data } = await supabase
+      // 1. Ambil Data Profil User
+      const { data: profileData } = await supabase
         .from("profiles")
         .select("id, username, xp, wins, total_matches, is_guest, title, frame_color")
         .eq("id", session.user.id)
         .single();
 
-      if (data) {
+      if (profileData) {
         setProfile({
-          ...data,
-          title: data.title || "Rookie Chaos",
-          frame_color: data.frame_color || "border-white/10",
+          ...profileData,
+          title: profileData.title || "Rookie Chaos",
+          frame_color: profileData.frame_color || "border-white/10",
         });
       }
+
+      // 2. Ambil Riwayat Pertandingan Terakhir
+      const { data: historyData } = await supabase
+        .from("match_history")
+        .select("id, room_code, game_id, winner_name, created_at")
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (historyData) {
+        setMatchLogs(historyData as MatchLog[]);
+      }
+
       setLoading(false);
     }
 
@@ -71,7 +96,7 @@ export default function ProfilePage() {
     if (!profile) return;
     sounds.playClick();
 
-    if (profile.xp < cost) {
+    if (profile.xp < cost && frameClass !== profile.frame_color) {
       alert("XP kamu tidak cukup untuk membeli bingkai ini!");
       return;
     }
@@ -86,7 +111,7 @@ export default function ProfilePage() {
 
     if (!error) {
       setProfile({ ...profile, frame_color: frameClass, xp: newXp });
-      sounds.playSuccess();
+      sounds.playVictory();
     }
     setUpdating(false);
   };
@@ -95,7 +120,7 @@ export default function ProfilePage() {
     if (!profile) return;
     sounds.playClick();
 
-    if (profile.xp < cost) {
+    if (profile.xp < cost && titleName !== profile.title) {
       alert("XP kamu tidak cukup untuk membeli Gelar ini!");
       return;
     }
@@ -110,7 +135,7 @@ export default function ProfilePage() {
 
     if (!error) {
       setProfile({ ...profile, title: titleName, xp: newXp });
-      sounds.playSuccess();
+      sounds.playVictory();
     }
     setUpdating(false);
   };
@@ -131,7 +156,6 @@ export default function ProfilePage() {
   const xpProgress = currentXp % 100;
   const winRate = profile.total_matches > 0 ? Math.round((profile.wins / profile.total_matches) * 100) : 0;
 
-  // LOGIKA UNLOCK BADGES
   const achievements = [
     { title: "First Blood", desc: "Menangkan 1 pertandingan", unlocked: profile.wins >= 1, icon: "⚔️" },
     { title: "Veteran Fighter", desc: "Mainkan 5 pertandingan", unlocked: profile.total_matches >= 5, icon: "🎮" },
@@ -155,7 +179,7 @@ export default function ProfilePage() {
         className="glass-panel p-6 md:p-8 relative overflow-hidden"
       >
         <div className="flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left">
-          {/* AVATAR DENGAN BINGKAI DINAMIS */}
+          {/* AVATAR BINGKAI DINAMIS */}
           <div className={`w-20 h-20 rounded-2xl bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-3xl font-black text-white border-2 transition-all ${profile.frame_color}`}>
             {profile.username?.[0]?.toUpperCase() || "P"}
           </div>
@@ -234,6 +258,31 @@ export default function ProfilePage() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* SECTION RIWAYAT PERTANDINGAN */}
+      <div className="glass-panel p-6 space-y-4">
+        <h2 className="text-base font-bold flex items-center gap-2">
+          <History className="w-5 h-5 text-secondary" /> Riwayat Pertandingan Terakhir
+        </h2>
+
+        {matchLogs.length === 0 ? (
+          <p className="text-xs text-textMuted italic text-center py-4">Belum ada riwayat pertandingan.</p>
+        ) : (
+          <div className="space-y-2">
+            {matchLogs.map((log) => (
+              <div key={log.id} className="p-3 bg-white/5 border border-white/10 rounded-xl flex items-center justify-between text-xs">
+                <div>
+                  <span className="font-bold text-white block uppercase tracking-wider">{log.game_id}</span>
+                  <span className="text-[10px] text-textMuted">Pemenang: <strong className="text-yellow-400">{log.winner_name}</strong></span>
+                </div>
+                <span className="text-[10px] bg-white/10 px-2.5 py-1 rounded-lg text-textMuted font-mono border border-white/5">
+                  Room: {log.room_code}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* SECTION XP SHOP (BINGKAI & GELAR) */}

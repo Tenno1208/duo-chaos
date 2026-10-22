@@ -1,6 +1,7 @@
 class SoundSystem {
   private ctx: AudioContext | null = null;
   public isMuted: boolean = false;
+  private bgmInterval: any = null;
 
   private init() {
     if (!this.ctx && typeof window !== "undefined") {
@@ -11,7 +12,46 @@ class SoundSystem {
 
   toggleMute() {
     this.isMuted = !this.isMuted;
+    if (this.isMuted) this.stopBGM();
     return this.isMuted;
+  }
+
+  // SYSTEM BGM SYNTHESIZER
+  startBGM(type: "lobby" | "game") {
+    if (this.isMuted) return;
+    this.stopBGM();
+    this.init();
+    if (!this.ctx) return;
+
+    const notes = type === "lobby" ? [261.63, 329.63, 392.00, 523.25] : [130.81, 146.83, 164.81, 174.61];
+    let noteIdx = 0;
+
+    this.bgmInterval = setInterval(() => {
+      if (this.isMuted || !this.ctx) return;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = type === "lobby" ? "sine" : "sawtooth";
+      osc.frequency.setValueAtTime(notes[noteIdx % notes.length], this.ctx.currentTime);
+
+      gain.gain.setValueAtTime(0.02, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.4);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.4);
+
+      noteIdx++;
+    }, type === "lobby" ? 600 : 300);
+  }
+
+  stopBGM() {
+    if (this.bgmInterval) {
+      clearInterval(this.bgmInterval);
+      this.bgmInterval = null;
+    }
   }
 
   playClick() {
@@ -34,51 +74,6 @@ class SoundSystem {
     
     osc.start();
     osc.stop(this.ctx.currentTime + 0.05);
-  }
-
-  playSuccess() {
-    if (this.isMuted) return;
-    this.init();
-    if (!this.ctx) return;
-
-    const now = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = "triangle";
-    osc.frequency.setValueAtTime(523.25, now);
-    osc.frequency.setValueAtTime(659.25, now + 0.08);
-    osc.frequency.setValueAtTime(783.99, now + 0.16);
-
-    gain.gain.setValueAtTime(0.15, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-
-    osc.start(now);
-    osc.stop(now + 0.3);
-  }
-
-  playTick() {
-    if (this.isMuted) return;
-    this.init();
-    if (!this.ctx) return;
-
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = "square";
-    osc.frequency.setValueAtTime(1000, this.ctx.currentTime);
-
-    gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.03);
-
-    osc.connect(gain);
-    gain.connect(this.ctx.destination);
-
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.03);
   }
 
   playVictory() {
