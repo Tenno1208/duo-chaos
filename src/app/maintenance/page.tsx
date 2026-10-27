@@ -14,16 +14,20 @@ import {
   Target,
   ChevronDown,
   ArrowRight,
+  Flame,
 } from "lucide-react";
 
 /**
  * ============ KONFIGURASI ============
  * Atur waktu selesai lewat .env:
  * NEXT_PUBLIC_MAINTENANCE_END="2026-10-31T12:00:00+07:00"
+ * NEXT_PUBLIC_MAINTENANCE_START="2026-10-28T00:00:00+07:00" (OPSIONAL: Untuk kalkulasi progress bar absolut)
+ *
  * Jika kosong: 3 hari sejak kunjungan pertama (tersimpan, tidak reset saat refresh).
  */
 const DEFAULT_DURATION_MS = 3 * 24 * 60 * 60 * 1000;
 const END_ENV = process.env.NEXT_PUBLIC_MAINTENANCE_END;
+const START_ENV = process.env.NEXT_PUBLIC_MAINTENANCE_START; // Tambahan untuk progress manual dari env
 
 const STORAGE = {
   start: "dc_maint_start",
@@ -80,13 +84,23 @@ export default function MaintenancePage() {
     let start = Number(safeGet(STORAGE.start));
     let end = Number(safeGet(STORAGE.end));
 
+    // Ambil waktu absolut dari ENV jika ada, ini bikin progress bar merujuk pada server bukan lokal user
     if (END_ENV) {
-      const parsed = new Date(END_ENV).getTime();
-      if (!Number.isNaN(parsed)) {
-        end = parsed;
+      const parsedEnd = new Date(END_ENV).getTime();
+      if (!Number.isNaN(parsedEnd)) {
+        end = parsedEnd;
         safeSet(STORAGE.end, String(end));
       }
     }
+    
+    if (START_ENV) {
+      const parsedStart = new Date(START_ENV).getTime();
+      if (!Number.isNaN(parsedStart)) {
+        start = parsedStart;
+        safeSet(STORAGE.start, String(start));
+      }
+    }
+
     if (!start) {
       start = current;
       safeSet(STORAGE.start, String(start));
@@ -137,8 +151,6 @@ export default function MaintenancePage() {
     }
     setEmailError("");
     safeSet(STORAGE.email, email);
-    // TODO: kirim ke backend, contoh:
-    // fetch("/api/notify", { method: "POST", body: JSON.stringify({ email }) });
     setSubscribed(true);
   };
 
@@ -593,34 +605,61 @@ function NetworkCanvas() {
 }
 
 /* =========================================================
- * MINI GAME: Tangkap Chaos
- * Orb mengecil seiring skor naik. 15 detik.
+ * MINI GAME: Tangkap Chaos (V2 - UPGRADED)
+ * - Combo sistem: klik cepat = multiplier
+ * - Particle effect saat klik
+ * - Orb teleport jika lama tidak diklik
  * ========================================================= */
 function ChaosCatcher() {
-  const DURATION = 15;
+  const DURATION = 20; // Tambah durasi dikit biar lebih asik
   const [phase, setPhase] = useState<"idle" | "playing" | "done">("idle");
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(0);
   const [left, setLeft] = useState(DURATION);
   const [pos, setPos] = useState({ x: 50, y: 55 });
+  const [combo, setCombo] = useState(1);
+  const [particles, setParticles] = useState<{id: number, x: number, y: number}[]>([]);
+  
   const scoreRef = useRef(0);
+  const lastHitRef = useRef(0);
+  const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     setBest(Number(safeGet(STORAGE.best)) || 0);
   }, []);
 
   const move = useCallback(() => {
-    setPos({ x: 12 + Math.random() * 76, y: 22 + Math.random() * 62 });
+    setPos({ x: 15 + Math.random() * 70, y: 25 + Math.random() * 55 });
   }, []);
 
   const start = () => {
     scoreRef.current = 0;
+    lastHitRef.current = Date.now();
     setScore(0);
+    setCombo(1);
     setLeft(DURATION);
     move();
     setPhase("playing");
   };
 
+  // Teleport otomatis kalau user kelamaan (Chaos mode)
+  useEffect(() => {
+    if (phase !== "playing") return;
+    
+    // Semakin tinggi skor, semakin cepat dia teleport otomatis (kabur)
+    const escapeTime = Math.max(700, 2000 - (score * 50)); 
+    
+    idleTimerRef.current = setInterval(() => {
+      move();
+      setCombo(1); // Reset combo kalau kelamaan
+    }, escapeTime);
+
+    return () => {
+      if (idleTimerRef.current) clearInterval(idleTimerRef.current);
+    };
+  }, [phase, score, move]);
+
+  // Main Timer
   useEffect(() => {
     if (phase !== "playing") return;
     const id = setInterval(() => {
@@ -640,17 +679,63 @@ function ChaosCatcher() {
     return () => clearInterval(id);
   }, [phase]);
 
+  // Hapus partikel efek setelah beberapa detik
+  useEffect(() => {
+    if (particles.length > 0) {
+      const timer = setTimeout(() => {
+        setParticles((prev) => prev.filter(p => Date.now() - p.id < 500));
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [particles]);
+
   const hit = (e: React.PointerEvent) => {
     e.preventDefault();
-    scoreRef.current += 1;
+    e.stopPropagation();
+
+    const now = Date.now();
+    let currentCombo = combo;
+    
+    // Logika Combo: Kalau jarak klik < 800ms, combo naik
+    if (now - lastHitRef.current < 800) {
+      currentCombo = Math.min(currentCombo + 1, 5); // Maksimal 5x combo
+    } else {
+      currentCombo = 1;
+    }
+    
+    setCombo(currentCombo);
+    lastHitRef.current = now;
+    
+    // Tambah skor dikali combo
+    scoreRef.current += (1 * currentCombo);
     setScore(scoreRef.current);
+    
+    // Efek ledakan partikel di posisi klik
+    setParticles(prev => [...prev, { id: Date.now(), x: pos.x, y: pos.y }]);
+
     move();
+    
+    // Reset timer kabur
+    if (idleTimerRef.current) {
+      clearInterval(idleTimerRef.current);
+      const escapeTime = Math.max(700, 2000 - (score * 50)); 
+      idleTimerRef.current = setInterval(() => {
+        move();
+        setCombo(1);
+      }, escapeTime);
+    }
   };
 
-  const size = Math.max(40, 64 - score * 1.2);
+  // Ukuran Orb mengecil, tapi ada batas wajar agar masih bisa diklik di HP
+  const size = Math.max(38, 70 - score * 0.8);
+  const getComboColor = () => {
+    if(combo >= 5) return "text-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.5)]";
+    if(combo >= 3) return "text-amber-400";
+    return "text-cyan-300";
+  };
 
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-md">
+    <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-md relative overflow-hidden">
       <div className="mb-3 flex items-center justify-between text-[11px] font-medium tracking-[0.2em] text-white/40 uppercase">
         <span className="flex items-center gap-1.5">
           <Target className="h-3.5 w-3.5 text-cyan-300" /> Tangkap Chaos
@@ -661,60 +746,101 @@ function ChaosCatcher() {
       </div>
 
       <div
-        className="relative h-56 touch-manipulation overflow-hidden rounded-2xl border border-white/10 bg-black/30 select-none sm:h-64"
+        className="relative h-60 sm:h-72 touch-manipulation overflow-hidden rounded-2xl border border-white/10 bg-black/40 select-none shadow-inner"
         style={{ touchAction: "manipulation" }}
       >
         {phase === "idle" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-5 text-center">
-            <p className="max-w-[16rem] text-xs leading-relaxed text-white/50">
-              Ketuk orb sebanyak mungkin dalam {DURATION} detik. Makin banyak skor, makin kecil orbnya.
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-5 text-center bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]">
+            <Flame className="w-10 h-10 text-rose-500 opacity-80 mb-2 animate-bounce" />
+            <p className="max-w-[16rem] text-xs leading-relaxed text-white/70">
+              Ketuk orb secepat kilat dalam {DURATION} detik! Orb akan kabur jika kamu terlalu lama. Hasilkan <strong>COMBO</strong> untuk poin lipat ganda!
             </p>
             <button
               onClick={start}
-              className="h-11 rounded-2xl bg-gradient-to-r from-violet-500 to-cyan-400 px-7 text-sm font-semibold text-white transition active:scale-95"
+              className="mt-2 h-11 rounded-xl bg-gradient-to-r from-violet-500 via-fuchsia-500 to-rose-500 px-8 text-sm font-bold text-white transition hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(244,63,94,0.4)]"
             >
-              Mulai
+              Mulai Gila
             </button>
           </div>
         )}
 
         {phase === "playing" && (
           <>
-            <div className="pointer-events-none absolute inset-x-4 top-3 flex justify-between text-xs font-semibold">
-              <span>
-                Skor <span className="text-cyan-300">{score}</span>
-              </span>
-              <span className="text-amber-300 tabular-nums">{left}s</span>
+            {/* UI Top Bar */}
+            <div className="pointer-events-none absolute inset-x-4 top-3 flex justify-between items-center z-20">
+              <div className="flex flex-col">
+                <span className="text-xs font-semibold text-white/60">Skor</span>
+                <span className="text-xl font-black text-cyan-300 leading-none">{score}</span>
+              </div>
+              
+              {/* Combo Indicator */}
+              {combo > 1 && (
+                <div className={`dc-pop text-lg font-black italic tracking-wider ${getComboColor()} transition-colors`}>
+                  {combo}x COMBO!
+                </div>
+              )}
+
+              <div className="flex flex-col text-right">
+                <span className="text-[10px] font-semibold text-white/60">Sisa Waktu</span>
+                <span className={`text-xl font-black tabular-nums leading-none ${left <= 5 ? "text-rose-500 animate-pulse" : "text-amber-300"}`}>
+                  {left}s
+                </span>
+              </div>
             </div>
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-white/5">
+
+            {/* Progress Bar Waktu Bawah */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1.5 bg-white/5 z-20">
               <div
-                className="h-full bg-gradient-to-r from-violet-400 to-cyan-300 transition-[width] duration-1000 ease-linear"
+                className={`h-full transition-[width] duration-1000 ease-linear ${left <= 5 ? "bg-rose-500" : "bg-gradient-to-r from-violet-400 to-cyan-300"}`}
                 style={{ width: `${(left / DURATION) * 100}%` }}
               />
             </div>
+
+            {/* Render Efek Ledakan Partikel */}
+            {particles.map(p => (
+              <div 
+                key={p.id}
+                className="pointer-events-none absolute w-16 h-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-cyan-400/50 scale-150 opacity-0 transition-all duration-500 ease-out"
+                style={{ 
+                  left: `${p.x}%`, 
+                  top: `${p.y}%`,
+                  animation: 'dc-particle-burst 0.5s forwards'
+                }}
+              />
+            ))}
+
+            {/* Target Orb Utama */}
             <button
               onPointerDown={hit}
               aria-label="Tangkap orb"
-              className="dc-pop absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle_at_30%_30%,#a5f3fc,#8b5cf6)] shadow-[0_0_30px_6px_rgba(139,92,246,.7)]"
+              className="dc-pop absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle_at_30%_30%,#a5f3fc,#8b5cf6)] shadow-[0_0_25px_5px_rgba(139,92,246,.8)] hover:scale-110 active:scale-75 transition-transform"
               style={{ left: `${pos.x}%`, top: `${pos.y}%`, width: size, height: size }}
-            />
+            >
+              {/* Inner core glow */}
+              <div className="absolute inset-2 rounded-full bg-white/20 blur-sm animate-pulse" />
+            </button>
           </>
         )}
 
         {phase === "done" && (
-          <div className="dc-pop absolute inset-0 flex flex-col items-center justify-center gap-1.5 p-5 text-center">
-            <Trophy className="h-8 w-8 text-amber-300" />
-            <p className="text-lg font-bold">
-              Skor <span className="text-cyan-300">{score}</span>
+          <div className="dc-pop absolute inset-0 flex flex-col items-center justify-center gap-2 p-5 text-center bg-black/60 backdrop-blur-sm z-30">
+            <Trophy className="h-10 w-10 text-amber-400 animate-bounce" />
+            <div className="space-y-1">
+              <p className="text-xs text-white/70 uppercase tracking-widest">Skor Akhir</p>
+              <p className="text-4xl font-black text-cyan-300 drop-shadow-[0_0_15px_rgba(34,211,238,0.5)]">
+                {score}
+              </p>
+            </div>
+            
+            <p className="text-[11px] font-medium text-white/50 mt-1">
+              {score > 0 && score >= best ? "🏆 GILAAA! REKOR BARU! 🔥" : "Yah... kurang cepet. Coba lagi!"}
             </p>
-            <p className="text-xs text-white/50">
-              {score > 0 && score >= best ? "Rekor baru! 🔥" : "Coba lagi untuk pecahkan rekor."}
-            </p>
+            
             <button
               onClick={start}
-              className="mt-2 h-10 rounded-2xl border border-violet-400/40 bg-violet-400/15 px-5 text-xs font-semibold transition active:scale-95"
+              className="mt-3 h-11 w-full max-w-[140px] rounded-xl border border-violet-400/40 bg-violet-500/20 px-5 text-xs font-bold text-white transition hover:bg-violet-500/40 active:scale-95 shadow-[0_0_15px_rgba(139,92,246,0.2)]"
             >
-              Main lagi
+              Main Lagi
             </button>
           </div>
         )}
@@ -739,6 +865,7 @@ const CSS = `
 @keyframes dc-shimmer { to { background-position: 200% center } }
 @keyframes dc-drift1 { 0%,100% { transform: translate(0,0) scale(1) } 50% { transform: translate(8%,6%) scale(1.15) } }
 @keyframes dc-drift2 { 0%,100% { transform: translate(0,0) scale(1) } 50% { transform: translate(-10%,-4%) scale(1.1) } }
+@keyframes dc-particle-burst { 0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; border-width: 8px; } 100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; border-width: 0px; } }
 
 .dc-rise { opacity: 0; animation: dc-rise .8s cubic-bezier(.22,1,.36,1) forwards; }
 .dc-tick { animation: dc-tick .35s ease-out; }
