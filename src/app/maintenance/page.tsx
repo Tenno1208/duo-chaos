@@ -228,14 +228,21 @@ export default function MaintenancePage() {
               <X className="h-6 w-6" />
             </button>
             
-            {/* Tempat Kamu Naruh Video/GIF nanti */}
-            <div className="aspect-video w-full bg-white/5 flex items-center justify-center border-b border-white/10 relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-t from-[#0a061e] to-transparent z-0" />
-              <div className="text-center relative z-10">
-                <Play className="h-16 w-16 mx-auto mb-4 text-violet-400 opacity-50" />
-                <p className="text-sm font-bold tracking-[0.2em] text-white/50 uppercase">SNEAK PEEK TRAILER</p>
-                <p className="text-xs text-white/30 mt-2 max-w-xs mx-auto">(Ganti div ini dengan tag &lt;video&gt; atau &lt;img src="..."&gt; di kode nanti)</p>
-              </div>
+            {/* Sneak Peek Trailer menggunakan GIF Retro Game */}
+            <div className="aspect-video w-full border-b border-white/10 relative overflow-hidden bg-black">
+            <img 
+                src="https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExMjRteDcwY2xsaGNtc203YmQydm53YzZpdHNnczMyOWVwb2MwaGNtdyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/L8K62iDadg1EQ/giphy.gif" 
+                alt="Sneak Peek Gameplay" 
+                className="absolute inset-0 w-full h-full object-cover opacity-80 mix-blend-screen"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0a061e] via-transparent to-[#0a061e]/50 z-0" />
+            <div className="absolute bottom-4 left-0 right-0 text-center z-10 pointer-events-none">
+                <span className="inline-flex animate-pulse items-center gap-1.5 rounded-full bg-black/60 border border-white/20 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white backdrop-blur-md">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-ping absolute" />
+                <span className="w-2 h-2 rounded-full bg-red-500 relative" />
+                Work In Progress
+                </span>
+            </div>
             </div>
             
             <div className="bg-gradient-to-t from-violet-900/30 to-transparent p-6 text-center">
