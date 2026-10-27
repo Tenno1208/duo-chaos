@@ -2,27 +2,25 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Wrench,
-  Clock,
-  Sparkles,
   Gamepad2,
+  Sparkles,
   Zap,
   Swords,
   Trophy,
   ServerCog,
   Bell,
-  CheckCircle2,
+  Check,
   Loader2,
-  Circle,
   Target,
+  ChevronDown,
+  ArrowRight,
 } from "lucide-react";
 
 /**
  * ============ KONFIGURASI ============
- * Atur waktu selesai maintenance lewat .env:
+ * Atur waktu selesai lewat .env:
  * NEXT_PUBLIC_MAINTENANCE_END="2026-10-31T12:00:00+07:00"
- * Kalau tidak diisi, otomatis 3 hari dari kunjungan pertama
- * (disimpan di localStorage, jadi TIDAK reset saat di-refresh).
+ * Jika kosong: 3 hari sejak kunjungan pertama (tersimpan, tidak reset saat refresh).
  */
 const DEFAULT_DURATION_MS = 3 * 24 * 60 * 60 * 1000;
 const END_ENV = process.env.NEXT_PUBLIC_MAINTENANCE_END;
@@ -48,53 +46,35 @@ const safeSet = (k: string, v: string) => {
     /* abaikan */
   }
 };
-
 const pad = (n: number) => String(n).padStart(2, "0");
 
-const UPDATES = [
-  { label: "Migrasi server ke infrastruktur baru", done: true },
-  { label: "Optimasi matchmaking & latency", done: true },
-  { label: "Pembersihan bug & balancing arena", done: false, active: true },
-  { label: "Peluncuran fitur baru", done: false },
-];
+const STEPS = [
+  { label: "Migrasi ke server baru", state: "done" },
+  { label: "Optimasi matchmaking & latency", state: "done" },
+  { label: "Balancing arena & pembersihan bug", state: "active" },
+  { label: "Peluncuran fitur baru", state: "todo" },
+] as const;
 
 const FEATURES = [
-  {
-    icon: Swords,
-    title: "Mode Arena Baru",
-    desc: "Duel chaos dengan aturan acak tiap ronde.",
-  },
-  {
-    icon: Trophy,
-    title: "Leaderboard Musiman",
-    desc: "Naik peringkat, rebut hadiah eksklusif.",
-  },
-  {
-    icon: Zap,
-    title: "Power-Up Chaos",
-    desc: "Kemampuan spesial yang bikin match makin gokil.",
-  },
-  {
-    icon: ServerCog,
-    title: "Server Lebih Ngebut",
-    desc: "Lag berkurang drastis, mabar makin mulus.",
-  },
+  { icon: Swords, title: "Mode Arena Baru", desc: "Duel dengan aturan acak di setiap ronde." },
+  { icon: Trophy, title: "Leaderboard Musiman", desc: "Naik peringkat, rebut hadiah eksklusif." },
+  { icon: Zap, title: "Power-Up Chaos", desc: "Kemampuan spesial yang membalik keadaan." },
+  { icon: ServerCog, title: "Server Lebih Ngebut", desc: "Lag turun drastis, mabar makin mulus." },
 ];
 
+/* =========================================================
+ * KOMPONEN UTAMA
+ * ========================================================= */
 export default function MaintenancePage() {
   const [mounted, setMounted] = useState(false);
-  const [window_, setWindow_] = useState<{ start: number; end: number }>({
-    start: 0,
-    end: 0,
-  });
+  const [range, setRange] = useState({ start: 0, end: 0 });
   const [now, setNow] = useState(0);
 
-  // --- notifikasi email ---
   const [email, setEmail] = useState("");
   const [subscribed, setSubscribed] = useState(false);
   const [emailError, setEmailError] = useState("");
+  const [gameOpen, setGameOpen] = useState(false);
 
-  // --- init waktu (persisten) ---
   useEffect(() => {
     const current = Date.now();
     let start = Number(safeGet(STORAGE.start));
@@ -102,7 +82,10 @@ export default function MaintenancePage() {
 
     if (END_ENV) {
       const parsed = new Date(END_ENV).getTime();
-      if (!Number.isNaN(parsed)) end = parsed;
+      if (!Number.isNaN(parsed)) {
+        end = parsed;
+        safeSet(STORAGE.end, String(end));
+      }
     }
     if (!start) {
       start = current;
@@ -113,7 +96,7 @@ export default function MaintenancePage() {
       safeSet(STORAGE.end, String(end));
     }
 
-    setWindow_({ start, end });
+    setRange({ start, end });
     setNow(current);
     setMounted(true);
 
@@ -127,7 +110,7 @@ export default function MaintenancePage() {
     return () => clearInterval(id);
   }, []);
 
-  const diff = Math.max(window_.end - now, 0);
+  const diff = Math.max(range.end - now, 0);
   const finished = mounted && diff === 0;
 
   const time = useMemo(
@@ -141,281 +124,485 @@ export default function MaintenancePage() {
   );
 
   const progress = useMemo(() => {
-    const total = window_.end - window_.start;
+    const total = range.end - range.start;
     if (!mounted || total <= 0) return 0;
-    return Math.min(Math.max(((now - window_.start) / total) * 100, 0), 100);
-  }, [mounted, now, window_]);
+    return Math.min(Math.max(((now - range.start) / total) * 100, 0), 100);
+  }, [mounted, now, range]);
 
   const submitEmail = (e: React.FormEvent) => {
     e.preventDefault();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setEmailError("Format email belum valid, coba cek lagi.");
+      setEmailError("Format email belum valid.");
       return;
     }
     setEmailError("");
     safeSet(STORAGE.email, email);
+    // TODO: kirim ke backend, contoh:
+    // fetch("/api/notify", { method: "POST", body: JSON.stringify({ email }) });
     setSubscribed(true);
   };
 
-  // --- partikel latar (posisi stabil, dibuat setelah mount) ---
-  const particles = useMemo(
-    () =>
-      Array.from({ length: 18 }, (_, i) => ({
-        id: i,
-        left: (i * 47) % 100,
-        size: 2 + ((i * 13) % 4),
-        duration: 10 + ((i * 7) % 12),
-        delay: -((i * 3) % 14),
-        hue: i % 3,
-      })),
-    []
-  );
-
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#0a061e] text-textMain selection:bg-primary selection:text-white">
-      <style>{`
-        @keyframes dc-float { 0%{transform:translateY(0) scale(1);opacity:0} 10%{opacity:.7} 90%{opacity:.7} 100%{transform:translateY(-105vh) scale(.6);opacity:0} }
-        @keyframes dc-shimmer { 0%{background-position:0% 50%} 100%{background-position:200% 50%} }
-        @keyframes dc-pop { 0%{transform:scale(0);opacity:0} 100%{transform:scale(1);opacity:1} }
-        @keyframes dc-tick { 0%{transform:translateY(-4px);opacity:.4} 100%{transform:translateY(0);opacity:1} }
-        @keyframes dc-grid { 0%{background-position:0 0} 100%{background-position:0 48px} }
-        .dc-shimmer-text{background-size:200% auto;animation:dc-shimmer 4s linear infinite}
-        .dc-pop{animation:dc-pop .25s ease-out}
-        .dc-tick{animation:dc-tick .3s ease-out}
-        @media (prefers-reduced-motion: reduce){ .dc-particle,.dc-shimmer-text,.dc-grid{animation:none!important} }
-      `}</style>
+    <div className="dc-root fixed inset-0 z-50 overflow-y-auto overflow-x-hidden bg-[#07041a] text-white">
+      <style>{CSS}</style>
 
-      {/* GRID LATAR */}
-      <div
-        className="dc-grid pointer-events-none absolute inset-0 opacity-[0.05]"
-        style={{
-          backgroundImage:
-            "linear-gradient(to right,#8b5cf6 1px,transparent 1px),linear-gradient(to bottom,#8b5cf6 1px,transparent 1px)",
-          backgroundSize: "48px 48px",
-          animation: "dc-grid 6s linear infinite",
-          maskImage: "radial-gradient(ellipse at center, black 30%, transparent 80%)",
-          WebkitMaskImage:
-            "radial-gradient(ellipse at center, black 30%, transparent 80%)",
-        }}
-      />
+      <NetworkCanvas />
 
-      {/* GLOW ATMOSFER */}
-      <div className="pointer-events-none absolute top-10 left-1/2 -translate-x-1/2 h-72 w-72 md:h-96 md:w-96 rounded-full bg-primary/15 blur-[100px]" />
-      <div className="pointer-events-none absolute bottom-10 left-1/4 h-64 w-64 rounded-full bg-secondary/10 blur-[100px]" />
+      {/* AURORA */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="dc-aurora dc-a1" />
+        <div className="dc-aurora dc-a2" />
+        <div className="dc-aurora dc-a3" />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse at 50% 0%, transparent 40%, rgba(7,4,26,.85) 100%)",
+          }}
+        />
+      </div>
 
-      {/* PARTIKEL */}
-      {mounted &&
-        particles.map((p) => (
-          <span
-            key={p.id}
-            className="dc-particle pointer-events-none absolute bottom-0 rounded-full"
-            style={{
-              left: `${p.left}%`,
-              width: p.size,
-              height: p.size,
-              background: ["#8b5cf6", "#22d3ee", "#f472b6"][p.hue],
-              boxShadow: `0 0 ${p.size * 2}px ${["#8b5cf6", "#22d3ee", "#f472b6"][p.hue]}`,
-              animation: `dc-float ${p.duration}s linear ${p.delay}s infinite`,
-            }}
-          />
-        ))}
+      <main
+        className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-xl flex-col items-center px-4 pt-[max(2rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6 sm:pt-14"
+      >
+        {/* STATUS PILL */}
+        <div className="dc-rise inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-[11px] font-medium tracking-[0.18em] text-white/70 uppercase backdrop-blur-md">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400/70" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-400" />
+          </span>
+          {finished ? "Hampir selesai" : "Maintenance berlangsung"}
+        </div>
 
-      {/* CONTAINER UTAMA */}
-      <div className="relative z-10 flex min-h-full items-center justify-center p-3 sm:p-6 md:py-12">
-        <div className="glass-panel w-full max-w-xl space-y-5 sm:space-y-6 border border-primary/30 p-5 sm:p-8 text-center shadow-[0_0_50px_rgba(139,92,246,0.25)] backdrop-blur-xl">
-          
-          {/* HEADER SECTION */}
-          <div className="space-y-3">
-            <div className="mx-auto inline-flex items-center justify-center rounded-2xl border border-primary/40 bg-gradient-to-br from-primary/30 to-accent/20 p-3.5 shadow-[0_0_25px_rgba(139,92,246,0.4)]">
-              <Gamepad2 className="h-9 w-9 sm:h-10 sm:w-10 text-primary" />
-            </div>
+        {/* LOGO + PROGRESS RING */}
+        <div className="dc-rise mt-8 sm:mt-10" style={{ animationDelay: ".08s" }}>
+          <ProgressLogo progress={progress} mounted={mounted} />
+        </div>
 
-            <div>
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-yellow-500/30 bg-yellow-500/15 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-yellow-400">
-                <Wrench className="h-3 w-3 animate-spin" />
-                {finished ? "Hampir Selesai" : "Maintenance Rutin"}
-              </div>
-            </div>
+        {/* JUDUL */}
+        <h1
+          className="dc-rise mt-6 text-center font-black leading-[0.95] tracking-tight"
+          style={{ animationDelay: ".16s", fontSize: "clamp(2.6rem, 13vw, 5rem)" }}
+        >
+          DUO <span className="dc-gradient-text">CHAOS</span>
+        </h1>
+        <p
+          className="dc-rise mt-3 text-center font-light tracking-wide text-white/90"
+          style={{ animationDelay: ".22s", fontSize: "clamp(1.05rem, 4.6vw, 1.5rem)" }}
+        >
+          {finished ? "Arena segera dibuka." : "Kembali lebih gila."}
+        </p>
+        <p
+          className="dc-rise mt-3 max-w-sm text-center text-[13px] leading-relaxed text-white/50 sm:text-sm"
+          style={{ animationDelay: ".28s" }}
+        >
+          Kami sedang merombak performa server, menghadirkan fitur baru, dan
+          membasmi bug demi pengalaman mabar terbaik.
+        </p>
 
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight text-white leading-tight">
-              DUO{" "}
-              <span className="dc-shimmer-text bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
-                CHAOS
-              </span>
-              <span className="block text-lg sm:text-xl md:text-2xl font-extrabold text-textMuted mt-0.5">
-                {finished ? "SEBENTAR LAGI BUKA!" : "KEMBALI LEBIH GILA!"}
-              </span>
-            </h1>
-
-            <p className="mx-auto max-w-sm sm:max-w-md text-xs sm:text-sm leading-relaxed text-textMuted">
-              Tim developer sedang merombak total performa server, menambah fitur gokil, dan membasmi bug demi pengalaman mabar yang maksimal.
-            </p>
-          </div>
-
-          {/* COUNTDOWN BOXES */}
-          <div className="space-y-2.5 bg-white/[0.02] border border-white/5 rounded-2xl p-3 sm:p-4">
-            <span className="flex items-center justify-center gap-1.5 text-[10px] sm:text-xs font-bold uppercase tracking-widest text-textMuted">
-              <Clock className="h-3.5 w-3.5 text-secondary" /> Estimasi Arena Dibuka Kembali
-            </span>
-
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { v: time.days, l: "Hari", c: "text-white" },
-                { v: time.hours, l: "Jam", c: "text-secondary" },
-                { v: time.minutes, l: "Menit", c: "text-accent" },
-                { v: time.seconds, l: "Detik", c: "text-yellow-400" },
-              ].map((t) => (
-                <div
-                  key={t.l}
-                  className="rounded-xl border border-white/10 bg-white/5 py-2.5 px-1 sm:p-3 text-center"
+        {/* COUNTDOWN */}
+        <section
+          aria-label="Hitung mundur"
+          className="dc-rise mt-9 w-full sm:mt-11"
+          style={{ animationDelay: ".34s" }}
+        >
+          <div className="grid grid-cols-4 gap-2 sm:gap-3">
+            {[
+              { v: time.days, l: "Hari" },
+              { v: time.hours, l: "Jam" },
+              { v: time.minutes, l: "Menit" },
+              { v: time.seconds, l: "Detik" },
+            ].map((t, i) => (
+              <div
+                key={t.l}
+                className="dc-cell relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035] py-3.5 text-center backdrop-blur-md sm:py-5"
+              >
+                <span
+                  key={mounted ? t.v : "x"}
+                  className={`${i === 3 ? "dc-tick" : ""} block font-mono font-semibold tabular-nums leading-none`}
+                  style={{ fontSize: "clamp(1.6rem, 9vw, 2.9rem)" }}
                 >
-                  <span
-                    key={mounted ? t.v : "x"}
-                    className={`dc-tick block font-mono text-xl sm:text-2xl md:text-3xl font-black tabular-nums ${t.c}`}
-                  >
-                    {mounted ? pad(t.v) : "--"}
-                  </span>
-                  <span className="block text-[9px] sm:text-[10px] font-bold uppercase text-textMuted mt-0.5">
-                    {t.l}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {/* PROGRESS BAR */}
-            <div className="space-y-1 pt-1">
-              <div className="h-2 w-full overflow-hidden rounded-full border border-white/10 bg-white/5">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-primary via-accent to-secondary shadow-[0_0_10px_rgba(139,92,246,0.6)] transition-all duration-1000"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-              <div className="flex justify-between text-[10px] font-semibold uppercase tracking-wider text-textMuted px-0.5">
-                <span>Progres sistem</span>
-                <span className="text-secondary font-mono">
-                  {mounted ? Math.floor(progress) : 0}%
+                  {mounted ? pad(t.v) : "--"}
+                </span>
+                <span className="mt-2 block text-[9px] font-medium tracking-[0.2em] text-white/40 uppercase sm:text-[10px]">
+                  {t.l}
                 </span>
               </div>
-            </div>
+            ))}
           </div>
+        </section>
 
-          {/* STATUS CHECKLIST */}
-          <div className="space-y-2 rounded-2xl border border-white/10 bg-white/[0.03] p-3.5 sm:p-4 text-left">
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-textMuted">
-              Status Pengerjaan
-            </p>
-            <div className="space-y-2">
-              {UPDATES.map((u) => (
-                <div key={u.label} className="flex items-center gap-2.5 text-xs sm:text-sm">
-                  {u.done ? (
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-green-400" />
-                  ) : u.active ? (
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-yellow-400" />
-                  ) : (
-                    <Circle className="h-4 w-4 shrink-0 text-white/20" />
-                  )}
-                  <span
-                    className={
-                      u.done
-                        ? "text-textMuted line-through decoration-white/20 text-xs sm:text-sm"
-                        : u.active
-                        ? "font-semibold text-white text-xs sm:text-sm"
-                        : "text-textMuted text-xs sm:text-sm"
-                    }
-                  >
-                    {u.label}
-                  </span>
+        {/* TIMELINE */}
+        <section
+          className="dc-rise mt-10 w-full rounded-3xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md sm:mt-12 sm:p-6"
+          style={{ animationDelay: ".4s" }}
+        >
+          <h2 className="mb-4 text-[11px] font-medium tracking-[0.2em] text-white/40 uppercase">
+            Status pengerjaan
+          </h2>
+          <ol className="relative space-y-4">
+            <span
+              aria-hidden
+              className="absolute top-2 bottom-2 left-[9px] w-px bg-gradient-to-b from-violet-400/60 via-white/10 to-white/5"
+            />
+            {STEPS.map((s) => (
+              <li key={s.label} className="relative flex items-center gap-3.5">
+                <span
+                  className={`relative z-10 flex h-[19px] w-[19px] shrink-0 items-center justify-center rounded-full border ${
+                    s.state === "done"
+                      ? "border-emerald-400/60 bg-emerald-400/15 text-emerald-300"
+                      : s.state === "active"
+                      ? "border-amber-400/70 bg-amber-400/15 text-amber-300"
+                      : "border-white/15 bg-[#07041a] text-transparent"
+                  }`}
+                >
+                  {s.state === "done" && <Check className="h-3 w-3" strokeWidth={3} />}
+                  {s.state === "active" && <Loader2 className="h-3 w-3 animate-spin" />}
+                </span>
+                <span
+                  className={`text-[13px] sm:text-sm ${
+                    s.state === "active"
+                      ? "font-semibold text-white"
+                      : s.state === "done"
+                      ? "text-white/50"
+                      : "text-white/35"
+                  }`}
+                >
+                  {s.label}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        {/* FITUR BARU */}
+        <section className="dc-rise mt-10 w-full sm:mt-12" style={{ animationDelay: ".46s" }}>
+          <h2 className="mb-4 flex items-center justify-center gap-2 text-[11px] font-medium tracking-[0.2em] text-white/40 uppercase">
+            <Sparkles className="h-3.5 w-3.5 text-violet-300" /> Yang akan hadir
+          </h2>
+          <div className="dc-scroll -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0">
+            {FEATURES.map((f) => (
+              <SpotCard key={f.title} className="w-[76%] shrink-0 snap-center sm:w-auto">
+                <div className="mb-3 inline-flex rounded-xl border border-violet-400/25 bg-violet-400/10 p-2.5">
+                  <f.icon className="h-4 w-4 text-violet-200" />
                 </div>
-              ))}
+                <p className="text-sm font-semibold text-white">{f.title}</p>
+                <p className="mt-1 text-xs leading-relaxed text-white/50">{f.desc}</p>
+              </SpotCard>
+            ))}
+          </div>
+        </section>
+
+        {/* NOTIFY */}
+        <section
+          className="dc-rise mt-10 w-full rounded-3xl border border-violet-400/20 bg-gradient-to-b from-violet-500/[0.12] to-transparent p-5 sm:mt-12 sm:p-6"
+          style={{ animationDelay: ".52s" }}
+        >
+          {subscribed ? (
+            <div className="dc-pop flex items-start gap-3 text-sm text-white/80">
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-300">
+                <Check className="h-3.5 w-3.5" strokeWidth={3} />
+              </span>
+              <span>
+                Siap! Kami kabari ke <b className="break-all text-white">{email}</b>{" "}
+                begitu arena dibuka.
+              </span>
             </div>
-          </div>
-
-          {/* FITUR / TEROBOSAN BARU */}
-          <div className="space-y-2.5">
-            <span className="flex items-center justify-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-textMuted">
-              <Sparkles className="h-3.5 w-3.5 text-accent" /> Yang Bakal Hadir
-            </span>
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              {FEATURES.map((f) => {
-                const Icon = f.icon;
-                return (
-                  <div
-                    key={f.title}
-                    className="group rounded-xl border border-white/10 bg-white/[0.03] p-3 text-left transition hover:border-primary/40 hover:bg-primary/10"
-                  >
-                    <div className="mb-2 inline-flex rounded-lg border border-primary/30 bg-primary/20 p-2">
-                      <Icon className="h-3.5 w-3.5 text-accent transition group-hover:scale-110" />
-                    </div>
-                    <p className="text-xs sm:text-sm font-bold text-white">{f.title}</p>
-                    <p className="text-[11px] sm:text-xs leading-relaxed text-textMuted mt-0.5">{f.desc}</p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* MINI GAME */}
-          <div className="pt-1">
-            <ChaosCatcher />
-          </div>
-
-          {/* NOTIFIKASI EMAIL */}
-          <div className="rounded-2xl border border-primary/20 bg-primary/10 p-3.5 sm:p-4">
-            {subscribed ? (
-              <div className="dc-pop flex items-center justify-center gap-2 text-xs font-medium text-secondary sm:text-sm py-1">
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-green-400" />
-                <span>Siap! Kami kabari ke <strong className="text-white">{email}</strong> begitu arena dibuka.</span>
+          ) : (
+            <form onSubmit={submitEmail} noValidate>
+              <p className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                <Bell className="h-4 w-4 text-violet-300" /> Kabari aku saat sudah buka
+              </p>
+              <div className="flex flex-col gap-2.5 sm:flex-row">
+                <input
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="emailkamu@contoh.com"
+                  aria-label="Email untuk notifikasi"
+                  className="h-12 min-w-0 flex-1 rounded-2xl border border-white/10 bg-black/30 px-4 text-base text-white outline-none transition placeholder:text-white/25 focus:border-violet-400/60 focus:bg-black/40"
+                />
+                <button
+                  type="submit"
+                  className="group inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-violet-500 to-fuchsia-500 px-6 text-sm font-semibold text-white shadow-[0_8px_30px_-8px_rgba(139,92,246,.8)] transition active:scale-[0.97]"
+                >
+                  Beritahu aku
+                  <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+                </button>
               </div>
-            ) : (
-              <form onSubmit={submitEmail} className="space-y-2">
-                <p className="flex items-center justify-center gap-1.5 text-xs font-bold text-white">
-                  <Bell className="h-3.5 w-3.5 text-accent" /> Kabari aku pas udah buka
-                </p>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="emailkamu@contoh.com"
-                    aria-label="Email untuk notifikasi"
-                    className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3.5 py-2.5 text-xs sm:text-sm text-white outline-none placeholder:text-white/30 focus:border-primary/60"
-                  />
-                  <button
-                    type="submit"
-                    className="rounded-xl bg-gradient-to-r from-primary to-accent px-4 py-2.5 text-xs sm:text-sm font-bold text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] transition hover:scale-[1.02] active:scale-95 shrink-0"
-                  >
-                    Notify Me
-                  </button>
-                </div>
-                {emailError && (
-                  <p className="text-left text-xs text-red-400">{emailError}</p>
-                )}
-              </form>
-            )}
+              {emailError && <p className="mt-2 text-xs text-rose-300">{emailError}</p>}
+            </form>
+          )}
+        </section>
+
+        {/* GAME (collapsible) */}
+        <section className="dc-rise mt-6 w-full" style={{ animationDelay: ".58s" }}>
+          <button
+            onClick={() => setGameOpen((o) => !o)}
+            aria-expanded={gameOpen}
+            className="flex h-12 w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-5 text-sm text-white/70 backdrop-blur-md transition hover:bg-white/[0.06] active:scale-[0.99]"
+          >
+            <span className="flex items-center gap-2.5">
+              <Gamepad2 className="h-4 w-4 text-violet-300" />
+              Bosan menunggu? Main dulu
+            </span>
+            <ChevronDown
+              className={`h-4 w-4 transition-transform duration-300 ${gameOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+          <div
+            className="grid transition-[grid-template-rows] duration-500 ease-out"
+            style={{ gridTemplateRows: gameOpen ? "1fr" : "0fr" }}
+          >
+            <div className="overflow-hidden">
+              <div className="pt-3">{gameOpen && <ChaosCatcher />}</div>
+            </div>
           </div>
+        </section>
 
-          {/* FOOTER NOTE */}
-          <p className="flex items-center justify-center gap-1.5 text-xs font-medium text-secondary pt-1">
-            <Sparkles className="h-3.5 w-3.5 shrink-0 text-accent" /> Siapkan diri kalian untuk kekacauan baru!
-          </p>
-
-        </div>
-      </div>
+        <p className="mt-10 text-center text-[11px] tracking-wide text-white/25">
+          Terima kasih sudah sabar menunggu ✦ Duo Chaos Team
+        </p>
+      </main>
     </div>
   );
 }
 
 /* =========================================================
- * MINI GAME: Tangkap Chaos — klik orb sebanyak mungkin
- * dalam 15 detik. Skor terbaik disimpan di localStorage.
+ * LOGO dengan cincin progres + orbit
+ * ========================================================= */
+function ProgressLogo({ progress, mounted }: { progress: number; mounted: boolean }) {
+  const R = 58;
+  const C = 2 * Math.PI * R;
+  const offset = C - (C * progress) / 100;
+
+  return (
+    <div className="relative flex h-[148px] w-[148px] items-center justify-center sm:h-[168px] sm:w-[168px]">
+      {/* orbit */}
+      <div aria-hidden className="dc-orbit absolute inset-0">
+        <span className="absolute -top-0.5 left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-cyan-300 shadow-[0_0_14px_3px_rgba(103,232,249,.7)]" />
+      </div>
+      <div aria-hidden className="dc-orbit-rev absolute inset-3">
+        <span className="absolute -bottom-0.5 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-fuchsia-300 shadow-[0_0_12px_3px_rgba(240,171,252,.7)]" />
+      </div>
+
+      <svg viewBox="0 0 140 140" className="absolute inset-0 h-full w-full -rotate-90">
+        <defs>
+          <linearGradient id="dc-ring" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#8b5cf6" />
+            <stop offset="50%" stopColor="#22d3ee" />
+            <stop offset="100%" stopColor="#f472b6" />
+          </linearGradient>
+        </defs>
+        <circle cx="70" cy="70" r={R} fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="3" />
+        <circle
+          cx="70"
+          cy="70"
+          r={R}
+          fill="none"
+          stroke="url(#dc-ring)"
+          strokeWidth="3.5"
+          strokeLinecap="round"
+          strokeDasharray={C}
+          strokeDashoffset={mounted ? offset : C}
+          style={{ transition: "stroke-dashoffset 1.2s cubic-bezier(.22,1,.36,1)" }}
+        />
+      </svg>
+
+      <div className="dc-float relative flex h-[84px] w-[84px] items-center justify-center rounded-[28px] border border-white/15 bg-gradient-to-br from-violet-500/30 to-cyan-400/10 shadow-[0_0_50px_-5px_rgba(139,92,246,.7)] backdrop-blur-md sm:h-[96px] sm:w-[96px]">
+        <Gamepad2 className="h-10 w-10 text-white sm:h-11 sm:w-11" strokeWidth={1.6} />
+      </div>
+
+      <span className="absolute -bottom-3 rounded-full border border-white/10 bg-[#0d0827] px-2.5 py-0.5 font-mono text-[11px] font-semibold text-cyan-200 tabular-nums">
+        {mounted ? Math.floor(progress) : 0}%
+      </span>
+    </div>
+  );
+}
+
+/* =========================================================
+ * KARTU dengan spotlight yang mengikuti sentuhan/kursor
+ * ========================================================= */
+function SpotCard({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty("--mx", `${e.clientX - r.left}px`);
+    el.style.setProperty("--my", `${e.clientY - r.top}px`);
+  };
+
+  return (
+    <div
+      ref={ref}
+      onPointerMove={onMove}
+      className={`dc-spot relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] p-5 text-left backdrop-blur-md ${className}`}
+    >
+      <div className="relative z-10">{children}</div>
+    </div>
+  );
+}
+
+/* =========================================================
+ * LATAR: jaringan partikel yang bereaksi ke pointer
+ * ========================================================= */
+function NetworkCanvas() {
+  const ref = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let w = 0;
+    let h = 0;
+    let raf = 0;
+    let link = 120;
+    const pointer = { x: -9999, y: -9999 };
+    type Node = { x: number; y: number; vx: number; vy: number; r: number };
+    let nodes: Node[] = [];
+
+    const resize = () => {
+      w = window.innerWidth;
+      h = window.innerHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      link = w < 640 ? 95 : 130;
+      const count = Math.round(Math.min(85, Math.max(28, (w * h) / 17000)));
+      nodes = Array.from({ length: count }, () => ({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        vx: (Math.random() - 0.5) * 0.35,
+        vy: (Math.random() - 0.5) * 0.35,
+        r: Math.random() * 1.4 + 0.6,
+      }));
+    };
+
+    const frame = () => {
+      ctx.clearRect(0, 0, w, h);
+      for (let i = 0; i < nodes.length; i++) {
+        const n = nodes[i];
+        if (!reduce) {
+          n.x += n.vx;
+          n.y += n.vy;
+          if (n.x < -10) n.x = w + 10;
+          if (n.x > w + 10) n.x = -10;
+          if (n.y < -10) n.y = h + 10;
+          if (n.y > h + 10) n.y = -10;
+
+          // tarikan halus ke pointer
+          const dx = pointer.x - n.x;
+          const dy = pointer.y - n.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < 160 * 160) {
+            n.x += dx * 0.006;
+            n.y += dy * 0.006;
+          }
+        }
+
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(196,181,253,.7)";
+        ctx.fill();
+
+        for (let j = i + 1; j < nodes.length; j++) {
+          const m = nodes[j];
+          const dx = n.x - m.x;
+          const dy = n.y - m.y;
+          const d = Math.hypot(dx, dy);
+          if (d < link) {
+            ctx.strokeStyle = `rgba(139,92,246,${(1 - d / link) * 0.28})`;
+            ctx.lineWidth = 0.7;
+            ctx.beginPath();
+            ctx.moveTo(n.x, n.y);
+            ctx.lineTo(m.x, m.y);
+            ctx.stroke();
+          }
+        }
+
+        const pd = Math.hypot(n.x - pointer.x, n.y - pointer.y);
+        if (pd < 170) {
+          ctx.strokeStyle = `rgba(34,211,238,${(1 - pd / 170) * 0.55})`;
+          ctx.lineWidth = 0.9;
+          ctx.beginPath();
+          ctx.moveTo(n.x, n.y);
+          ctx.lineTo(pointer.x, pointer.y);
+          ctx.stroke();
+        }
+      }
+      if (!reduce) raf = requestAnimationFrame(frame);
+    };
+
+    const onMove = (e: PointerEvent) => {
+      pointer.x = e.clientX;
+      pointer.y = e.clientY;
+    };
+    const onLeave = () => {
+      pointer.x = -9999;
+      pointer.y = -9999;
+    };
+    let touchTimer: ReturnType<typeof setTimeout> | undefined;
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerType !== "mouse") {
+        touchTimer = setTimeout(onLeave, 600);
+      }
+    };
+
+    resize();
+    frame();
+    window.addEventListener("resize", resize);
+    window.addEventListener("pointermove", onMove, { passive: true });
+    window.addEventListener("pointerdown", onMove, { passive: true });
+    window.addEventListener("pointerup", onUp, { passive: true });
+    window.addEventListener("pointerleave", onLeave);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      if (touchTimer) clearTimeout(touchTimer);
+      window.removeEventListener("resize", resize);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerdown", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointerleave", onLeave);
+    };
+  }, []);
+
+  return (
+    <canvas
+      ref={ref}
+      aria-hidden
+      className="pointer-events-none absolute inset-0 h-full w-full"
+    />
+  );
+}
+
+/* =========================================================
+ * MINI GAME: Tangkap Chaos
+ * Orb mengecil seiring skor naik. 15 detik.
  * ========================================================= */
 function ChaosCatcher() {
   const DURATION = 15;
-  const [state, setState] = useState<"idle" | "playing" | "done">("idle");
+  const [phase, setPhase] = useState<"idle" | "playing" | "done">("idle");
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(0);
   const [left, setLeft] = useState(DURATION);
-  const [pos, setPos] = useState({ x: 50, y: 50 });
+  const [pos, setPos] = useState({ x: 50, y: 55 });
   const scoreRef = useRef(0);
 
   useEffect(() => {
@@ -423,7 +610,7 @@ function ChaosCatcher() {
   }, []);
 
   const move = useCallback(() => {
-    setPos({ x: 12 + Math.random() * 76, y: 15 + Math.random() * 70 });
+    setPos({ x: 12 + Math.random() * 76, y: 22 + Math.random() * 62 });
   }, []);
 
   const start = () => {
@@ -431,16 +618,16 @@ function ChaosCatcher() {
     setScore(0);
     setLeft(DURATION);
     move();
-    setState("playing");
+    setPhase("playing");
   };
 
   useEffect(() => {
-    if (state !== "playing") return;
+    if (phase !== "playing") return;
     const id = setInterval(() => {
       setLeft((l) => {
         if (l <= 1) {
           clearInterval(id);
-          setState("done");
+          setPhase("done");
           if (scoreRef.current > (Number(safeGet(STORAGE.best)) || 0)) {
             safeSet(STORAGE.best, String(scoreRef.current));
             setBest(scoreRef.current);
@@ -451,75 +638,83 @@ function ChaosCatcher() {
       });
     }, 1000);
     return () => clearInterval(id);
-  }, [state]);
+  }, [phase]);
 
-  const hit = () => {
+  const hit = (e: React.PointerEvent) => {
+    e.preventDefault();
     scoreRef.current += 1;
     setScore(scoreRef.current);
     move();
   };
 
+  const size = Math.max(40, 64 - score * 1.2);
+
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-textMuted px-1">
-        <span className="flex items-center gap-1">
-          <Target className="h-3 w-3 text-secondary" /> Mini-Game: Tangkap Chaos
+    <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-md">
+      <div className="mb-3 flex items-center justify-between text-[11px] font-medium tracking-[0.2em] text-white/40 uppercase">
+        <span className="flex items-center gap-1.5">
+          <Target className="h-3.5 w-3.5 text-cyan-300" /> Tangkap Chaos
         </span>
         <span>
-          Terbaik: <span className="text-yellow-400 font-mono font-bold">{best}</span>
+          Rekor <span className="text-amber-300">{best}</span>
         </span>
       </div>
 
-      <div className="relative h-40 sm:h-44 select-none overflow-hidden rounded-2xl border border-white/10 bg-black/40">
-        {state === "idle" && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5 p-4 text-center">
-            <p className="text-xs text-textMuted max-w-xs">
-              Sambil nunggu, klik orb sebanyak-banyaknya dalam {DURATION} detik!
+      <div
+        className="relative h-56 touch-manipulation overflow-hidden rounded-2xl border border-white/10 bg-black/30 select-none sm:h-64"
+        style={{ touchAction: "manipulation" }}
+      >
+        {phase === "idle" && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-5 text-center">
+            <p className="max-w-[16rem] text-xs leading-relaxed text-white/50">
+              Ketuk orb sebanyak mungkin dalam {DURATION} detik. Makin banyak skor, makin kecil orbnya.
             </p>
             <button
               onClick={start}
-              className="rounded-xl bg-gradient-to-r from-primary to-accent px-4 py-2 text-xs sm:text-sm font-bold text-white transition hover:scale-105 active:scale-95 shadow-[0_0_15px_rgba(139,92,246,0.3)]"
+              className="h-11 rounded-2xl bg-gradient-to-r from-violet-500 to-cyan-400 px-7 text-sm font-semibold text-white transition active:scale-95"
             >
-              Mulai Main
+              Mulai
             </button>
           </div>
         )}
 
-        {state === "playing" && (
+        {phase === "playing" && (
           <>
-            <div className="absolute left-3 top-2.5 text-xs font-bold text-white">
-              Skor: <span className="text-accent font-mono">{score}</span>
+            <div className="pointer-events-none absolute inset-x-4 top-3 flex justify-between text-xs font-semibold">
+              <span>
+                Skor <span className="text-cyan-300">{score}</span>
+              </span>
+              <span className="text-amber-300 tabular-nums">{left}s</span>
             </div>
-            <div className="absolute right-3 top-2.5 text-xs font-bold text-white">
-              ⏱ <span className="text-yellow-400 font-mono">{left}s</span>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-white/5">
+              <div
+                className="h-full bg-gradient-to-r from-violet-400 to-cyan-300 transition-[width] duration-1000 ease-linear"
+                style={{ width: `${(left / DURATION) * 100}%` }}
+              />
             </div>
             <button
-              onClick={hit}
+              onPointerDown={hit}
               aria-label="Tangkap orb"
-              className="dc-pop absolute h-12 w-12 sm:h-14 sm:w-14 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br from-accent to-primary shadow-[0_0_20px_rgba(139,92,246,0.9)] transition-transform active:scale-75 flex items-center justify-center cursor-pointer"
-              style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
-            >
-              <div className="w-4 h-4 rounded-full bg-white/80 animate-ping absolute" />
-            </button>
+              className="dc-pop absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle_at_30%_30%,#a5f3fc,#8b5cf6)] shadow-[0_0_30px_6px_rgba(139,92,246,.7)]"
+              style={{ left: `${pos.x}%`, top: `${pos.y}%`, width: size, height: size }}
+            />
           </>
         )}
 
-        {state === "done" && (
-          <div className="dc-pop absolute inset-0 flex flex-col items-center justify-center gap-1.5 p-4 text-center">
-            <Trophy className="h-6 w-6 sm:h-7 sm:w-7 text-yellow-400 animate-bounce" />
-            <p className="text-xs sm:text-sm font-bold text-white">
-              Skor kamu: <span className="text-accent font-mono">{score}</span>
+        {phase === "done" && (
+          <div className="dc-pop absolute inset-0 flex flex-col items-center justify-center gap-1.5 p-5 text-center">
+            <Trophy className="h-8 w-8 text-amber-300" />
+            <p className="text-lg font-bold">
+              Skor <span className="text-cyan-300">{score}</span>
             </p>
-            <p className="text-[11px] sm:text-xs text-textMuted">
-              {score >= best && score > 0
-                ? "Rekor baru! 🔥"
-                : "Coba lagi buat pecahin rekor!"}
+            <p className="text-xs text-white/50">
+              {score > 0 && score >= best ? "Rekor baru! 🔥" : "Coba lagi untuk pecahkan rekor."}
             </p>
             <button
               onClick={start}
-              className="mt-1 rounded-xl border border-primary/40 bg-primary/20 px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-primary/30"
+              className="mt-2 h-10 rounded-2xl border border-violet-400/40 bg-violet-400/15 px-5 text-xs font-semibold transition active:scale-95"
             >
-              Main Lagi
+              Main lagi
             </button>
           </div>
         )}
@@ -527,3 +722,60 @@ function ChaosCatcher() {
     </div>
   );
 }
+
+/* =========================================================
+ * CSS (animasi & util)
+ * ========================================================= */
+const CSS = `
+.dc-root { -webkit-tap-highlight-color: transparent; overscroll-behavior: contain; }
+
+@keyframes dc-rise { from { opacity: 0; transform: translateY(18px) } to { opacity: 1; transform: none } }
+@keyframes dc-pop { from { opacity: 0; transform: translate(-50%,-50%) scale(.3) } to { opacity: 1; transform: translate(-50%,-50%) scale(1) } }
+@keyframes dc-pop-flat { from { opacity: 0; transform: scale(.94) } to { opacity: 1; transform: none } }
+@keyframes dc-tick { from { opacity: .35; transform: translateY(-8px) } to { opacity: 1; transform: none } }
+@keyframes dc-spin { to { transform: rotate(360deg) } }
+@keyframes dc-spin-rev { to { transform: rotate(-360deg) } }
+@keyframes dc-float { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
+@keyframes dc-shimmer { to { background-position: 200% center } }
+@keyframes dc-drift1 { 0%,100% { transform: translate(0,0) scale(1) } 50% { transform: translate(8%,6%) scale(1.15) } }
+@keyframes dc-drift2 { 0%,100% { transform: translate(0,0) scale(1) } 50% { transform: translate(-10%,-4%) scale(1.1) } }
+
+.dc-rise { opacity: 0; animation: dc-rise .8s cubic-bezier(.22,1,.36,1) forwards; }
+.dc-tick { animation: dc-tick .35s ease-out; }
+.dc-orbit { animation: dc-spin 9s linear infinite; }
+.dc-orbit-rev { animation: dc-spin-rev 14s linear infinite; }
+.dc-float { animation: dc-float 4s ease-in-out infinite; }
+.dc-pop { animation: dc-pop-flat .3s ease-out; }
+button.dc-pop { animation: dc-pop .22s ease-out; }
+
+.dc-gradient-text {
+  background: linear-gradient(90deg, #a78bfa, #22d3ee, #f472b6, #a78bfa);
+  background-size: 200% auto;
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  animation: dc-shimmer 5s linear infinite;
+}
+
+.dc-aurora { position: absolute; border-radius: 9999px; filter: blur(90px); opacity: .5; will-change: transform; }
+.dc-a1 { width: 70vmax; height: 70vmax; left: -25vmax; top: -20vmax; background: radial-gradient(circle, rgba(139,92,246,.55), transparent 65%); animation: dc-drift1 18s ease-in-out infinite; }
+.dc-a2 { width: 60vmax; height: 60vmax; right: -25vmax; top: 25%; background: radial-gradient(circle, rgba(34,211,238,.35), transparent 65%); animation: dc-drift2 22s ease-in-out infinite; }
+.dc-a3 { width: 55vmax; height: 55vmax; left: 5%; bottom: -30vmax; background: radial-gradient(circle, rgba(244,114,182,.3), transparent 65%); animation: dc-drift1 26s ease-in-out infinite reverse; }
+
+.dc-spot::before {
+  content: ""; position: absolute; inset: 0; opacity: 0; transition: opacity .3s;
+  background: radial-gradient(240px circle at var(--mx, 50%) var(--my, 50%), rgba(139,92,246,.28), transparent 70%);
+}
+.dc-spot:hover::before, .dc-spot:active::before { opacity: 1; }
+
+.dc-cell::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,.07), transparent 45%);
+}
+
+.dc-scroll { scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.dc-scroll::-webkit-scrollbar { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dc-rise, .dc-tick, .dc-orbit, .dc-orbit-rev, .dc-float, .dc-gradient-text, .dc-aurora { animation: none !important; opacity: 1; }
+}
+`;
