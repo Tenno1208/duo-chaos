@@ -34,6 +34,15 @@ interface Player {
   };
 }
 
+// VARIASI ANIMASI SCREEN SHAKE
+const screenShakeVariant = {
+  shake: {
+    x: [0, -8, 8, -8, 8, -4, 4, 0],
+    y: [0, 4, -4, 4, -4, 2, -2, 0],
+    transition: { duration: 0.4, repeat: Infinity }
+  }
+};
+
 export default function RoomLobby({ params }: { params: { code: string } }) {
   const roomCode = params.code;
   const router = useRouter();
@@ -224,7 +233,6 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
     if (!roomId || !currentGameId) return;
     setStartingGame(true);
 
-    // Hanya ambil pemain utama (non-spectator) untuk dikirim ke game
     const activePlayers = players.filter((p) => !p.is_spectator);
 
     try {
@@ -329,8 +337,32 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
     const scores: Record<string, number> = gameState.scores || {};
     const sortedPlayers = [...activePlayers].sort((a, b) => (scores[b.player_id] || 0) - (scores[a.player_id] || 0));
 
+    const [votedRematch, setVotedRematch] = useState(false);
+
+    const handleVoteRematch = async () => {
+      sounds.playClick();
+      setVotedRematch(true);
+      if (!roomId) return;
+
+      await supabase
+        .from("room_players")
+        .update({ is_ready: true })
+        .eq("room_id", roomId)
+        .eq("player_id", currentUserId);
+
+      if (isHost) {
+        await supabase
+          .from("rooms")
+          .update({
+            status: "waiting",
+            game_state: {},
+          })
+          .eq("id", roomId);
+      }
+    };
+
     mainContent = (
-      <div className="max-w-md mx-auto glass-panel p-8 text-center space-y-6">
+      <motion.div variants={screenShakeVariant} animate="shake" className="max-w-md mx-auto glass-panel p-8 text-center space-y-6">
         <div className="p-4 bg-yellow-500/20 text-yellow-400 rounded-full w-20 h-20 mx-auto flex items-center justify-center shadow-[0_0_30px_rgba(234,179,8,0.3)]">
           <Crown className="w-10 h-10" />
         </div>
@@ -350,27 +382,27 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
         </div>
 
         <div className="space-y-3 pt-2">
-          {isHost ? (
-            <>
-              <button disabled={startingGame} onClick={handleStartGame} className="w-full btn-primary py-3.5 flex items-center justify-center gap-2">
-                {startingGame ? <Loader2 className="w-5 h-5 animate-spin" /> : <><RotateCcw className="w-5 h-5" /> Main Lagi (Rematch)</>}
-              </button>
-              
-              <button disabled={startingGame} onClick={handleBackToLobby} className="w-full btn-secondary py-3.5 flex items-center justify-center gap-2">
-                <Home className="w-5 h-5" /> Kembali ke Lobby
-              </button>
-            </>
+          {!votedRematch ? (
+            <button onClick={handleVoteRematch} className="w-full btn-primary py-3.5 flex items-center justify-center gap-2">
+              <RotateCcw className="w-5 h-5" /> Vote Rematch (Main Lagi)
+            </button>
           ) : (
-            <p className="text-sm text-textMuted italic animate-pulse">
-              Menunggu Host memilih rematch atau kembali ke lobby...
-            </p>
+            <div className="p-3 bg-green-500/20 border border-green-500/30 text-green-300 rounded-xl text-xs font-bold animate-pulse">
+              ✓ Kamu setuju Rematch! Menunggu pemain lain...
+            </div>
+          )}
+
+          {isHost && (
+            <button disabled={startingGame} onClick={handleBackToLobby} className="w-full btn-secondary py-3.5 flex items-center justify-center gap-2">
+              <Home className="w-5 h-5" /> Kembali ke Lobby
+            </button>
           )}
 
           <button onClick={leaveRoom} className="w-full py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl text-xs font-bold transition-all">
             Keluar Room
           </button>
         </div>
-      </div>
+      </motion.div>
     );
   } else {
     mainContent = (
@@ -400,7 +432,6 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* AVATAR PICKER UNTUK USER */}
             {currentUserId && (
               <AvatarPicker
                 userId={currentUserId}
@@ -418,7 +449,7 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
           </div>
         </div>
 
-        {/* LOBBY MEMBERS (PEMAIN UTAMA & PENONTON) */}
+        {/* LOBBY MEMBERS */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-bold text-textMuted px-1">Pemain Utama</h2>
@@ -466,7 +497,6 @@ export default function RoomLobby({ params }: { params: { code: string } }) {
             })}
           </div>
 
-          {/* LIST SPECTATORS / PENONTON */}
           {spectatorPlayers.length > 0 && (
             <div className="pt-4 border-t border-white/10 space-y-2">
               <h3 className="text-xs font-bold text-textMuted uppercase flex items-center gap-1.5">
