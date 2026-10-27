@@ -134,11 +134,11 @@ export default function MaintenancePage() {
       setSubscribed(true);
     }
 
-    // Initialize BGM
-    const audio = new Audio("/bgm-elevator.mp3"); // Tambahkan file MP3 ini di folder public/ kamu nanti
-    audio.loop = true;
-    audio.volume = 0.3;
-    bgmRef.current = audio;
+    // Menggunakan file lokal yang sudah kamu upload ke folder public/
+const audio = new Audio("/bgm-elevator.mp3");
+audio.loop = true;
+audio.volume = 0.3;
+bgmRef.current = audio;
 
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => {
@@ -221,42 +221,35 @@ export default function MaintenancePage() {
       )}
 
       {/* MODAL SNEAK PEEK TRAILER */}
-      {trailerOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 backdrop-blur-xl transition-all">
-          <div className="dc-pop relative w-full max-w-3xl overflow-hidden rounded-3xl border border-white/20 bg-[#0a061e] shadow-[0_0_80px_rgba(139,92,246,0.5)]">
-            <button onClick={() => setTrailerOpen(false)} className="absolute right-4 top-4 z-10 rounded-full bg-black/50 p-2 text-white/70 backdrop-blur-md hover:bg-white/20 hover:text-white transition">
-              <X className="h-6 w-6" />
-            </button>
-            
-            {/* Sneak Peek Trailer menggunakan GIF Retro Game */}
-            <div className="aspect-video w-full border-b border-white/10 relative overflow-hidden bg-black">
-            <img 
-                src="https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExMjRteDcwY2xsaGNtc203YmQydm53YzZpdHNnczMyOWVwb2MwaGNtdyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/L8K62iDadg1EQ/giphy.gif" 
-                alt="Sneak Peek Gameplay" 
-                className="absolute inset-0 w-full h-full object-cover opacity-80 mix-blend-screen"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#0a061e] via-transparent to-[#0a061e]/50 z-0" />
-            <div className="absolute bottom-4 left-0 right-0 text-center z-10 pointer-events-none">
-                <span className="inline-flex animate-pulse items-center gap-1.5 rounded-full bg-black/60 border border-white/20 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white backdrop-blur-md">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-ping absolute" />
-                <span className="w-2 h-2 rounded-full bg-red-500 relative" />
-                Work In Progress
-                </span>
-            </div>
-            </div>
-            
-            <div className="bg-gradient-to-t from-violet-900/30 to-transparent p-6 text-center">
-              <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/15 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-violet-300 mb-3">
-                <Eye className="h-3 w-3" /> Exclusive Preview
-              </div>
-              <h3 className="text-2xl font-black text-white">MODE ARENA BARU</h3>
-              <p className="mt-2 text-sm text-white/70 max-w-lg mx-auto leading-relaxed">
-                Setiap ronde kini dilengkapi Modifier Bencana Acak! Layar terbalik, kecepatan ganda, hingga sabotase rahasia. Persahabatanmu sedang diuji.
-              </p>
-            </div>
-          </div>
+{trailerOpen && (
+  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 backdrop-blur-xl transition-all">
+    <div className="dc-pop relative w-full max-w-3xl overflow-hidden rounded-3xl border border-white/20 bg-[#0a061e] shadow-[0_0_80px_rgba(139,92,246,0.5)]">
+      <button onClick={() => setTrailerOpen(false)} className="absolute right-4 top-4 z-10 rounded-full bg-black/50 p-2 text-white/70 backdrop-blur-md hover:bg-white/20 hover:text-white transition">
+        <X className="h-6 w-6" />
+      </button>
+      
+      {/* Sneak Peek menggunakan YouTube Embed Publik yang aman */}
+      <div className="aspect-video w-full bg-black relative overflow-hidden">
+        <iframe 
+          className="w-full h-full object-cover"
+          src="https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1&mute=1&controls=0&loop=1" 
+          title="Sneak Peek Trailer"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        />
+      </div>
+      
+      <div className="bg-gradient-to-t from-violet-900/30 to-transparent p-6 text-center">
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/15 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-violet-300 mb-3">
+          <Eye className="h-3 w-3" /> Exclusive Preview
         </div>
-      )}
+        <h3 className="text-2xl font-black text-white">MODE ARENA BARU</h3>
+        <p className="mt-2 text-sm text-white/70 max-w-lg mx-auto leading-relaxed">
+          Setiap ronde kini dilengkapi Modifier Bencana Acak! Layar terbalik, kecepatan ganda, hingga sabotase rahasia. Persahabatanmu sedang diuji.
+        </p>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* AUDIO TOGGLE */}
       <button 
