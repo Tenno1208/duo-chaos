@@ -288,6 +288,18 @@ bgmRef.current = audio;
           {finished ? "Hampir selesai" : "Maintenance berlangsung"}
         </div>
 
+        {/* BANNER TRIGGER AUDIO PERTAMA */}
+{isMuted && (
+  <button 
+    onClick={toggleMute}
+    className="dc-rise mb-4 inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600/30 to-cyan-500/30 border border-violet-400/40 px-4 py-2 text-xs font-bold text-cyan-200 backdrop-blur-md shadow-[0_0_20px_rgba(139,92,246,0.3)] transition hover:scale-105 active:scale-95 cursor-pointer"
+    style={{ animationDelay: ".04s" }}
+  >
+    <Volume2 className="w-4 h-4 animate-bounce text-cyan-300" />
+    <span>Klik di sini untuk aktifkan BGM & Efek Suara 🎵</span>
+  </button>
+)}
+
         {/* LOGO + PROGRESS RING (TETAP SAMA, DITAMBAH ONCLICK EASTER EGG) */}
         <div className="dc-rise mt-8 sm:mt-10 cursor-pointer group" style={{ animationDelay: ".08s" }} onClick={handleSecretClick}>
           <ProgressLogo progress={progress} mounted={mounted} />
