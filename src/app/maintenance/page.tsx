@@ -15,19 +15,22 @@ import {
   ChevronDown,
   ArrowRight,
   Flame,
+  Volume2,
+  VolumeX,
+  Play,
+  X,
+  Eye,
 } from "lucide-react";
 
 /**
  * ============ KONFIGURASI ============
  * Atur waktu selesai lewat .env:
  * NEXT_PUBLIC_MAINTENANCE_END="2026-10-31T12:00:00+07:00"
- * NEXT_PUBLIC_MAINTENANCE_START="2026-10-28T00:00:00+07:00" (OPSIONAL: Untuk kalkulasi progress bar absolut)
- *
- * Jika kosong: 3 hari sejak kunjungan pertama (tersimpan, tidak reset saat refresh).
+ * NEXT_PUBLIC_MAINTENANCE_START="2026-10-28T00:00:00+07:00"
  */
 const DEFAULT_DURATION_MS = 3 * 24 * 60 * 60 * 1000;
 const END_ENV = process.env.NEXT_PUBLIC_MAINTENANCE_END;
-const START_ENV = process.env.NEXT_PUBLIC_MAINTENANCE_START; // Tambahan untuk progress manual dari env
+const START_ENV = process.env.NEXT_PUBLIC_MAINTENANCE_START;
 
 const STORAGE = {
   start: "dc_maint_start",
@@ -60,10 +63,10 @@ const STEPS = [
 ] as const;
 
 const FEATURES = [
-  { icon: Swords, title: "Mode Arena Baru", desc: "Duel dengan aturan acak di setiap ronde." },
-  { icon: Trophy, title: "Leaderboard Musiman", desc: "Naik peringkat, rebut hadiah eksklusif." },
-  { icon: Zap, title: "Power-Up Chaos", desc: "Kemampuan spesial yang membalik keadaan." },
-  { icon: ServerCog, title: "Server Lebih Ngebut", desc: "Lag turun drastis, mabar makin mulus." },
+  { icon: Swords, title: "Mode Arena Baru", desc: "Duel dengan aturan acak di setiap ronde.", hasTrailer: true },
+  { icon: Trophy, title: "Leaderboard Musiman", desc: "Naik peringkat, rebut hadiah eksklusif.", hasTrailer: false },
+  { icon: Zap, title: "Power-Up Chaos", desc: "Kemampuan spesial yang membalik keadaan.", hasTrailer: false },
+  { icon: ServerCog, title: "Server Lebih Ngebut", desc: "Lag turun drastis, mabar makin mulus.", hasTrailer: false },
 ];
 
 /* =========================================================
@@ -79,12 +82,23 @@ export default function MaintenancePage() {
   const [emailError, setEmailError] = useState("");
   const [gameOpen, setGameOpen] = useState(false);
 
+  // Fitur Audio BGM
+  const [isMuted, setIsMuted] = useState(true);
+  const bgmRef = useRef<HTMLAudioElement | null>(null);
+
+  // Fitur Easter Egg
+  const [glitchMode, setGlitchMode] = useState(false);
+  const clickCountRef = useRef(0);
+  const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Fitur Sneak Peek Modal
+  const [trailerOpen, setTrailerOpen] = useState(false);
+
   useEffect(() => {
     const current = Date.now();
     let start = Number(safeGet(STORAGE.start));
     let end = Number(safeGet(STORAGE.end));
 
-    // Ambil waktu absolut dari ENV jika ada, ini bikin progress bar merujuk pada server bukan lokal user
     if (END_ENV) {
       const parsedEnd = new Date(END_ENV).getTime();
       if (!Number.isNaN(parsedEnd)) {
@@ -120,9 +134,45 @@ export default function MaintenancePage() {
       setSubscribed(true);
     }
 
+    // Initialize BGM
+    const audio = new Audio("/bgm-elevator.mp3"); // Tambahkan file MP3 ini di folder public/ kamu nanti
+    audio.loop = true;
+    audio.volume = 0.3;
+    bgmRef.current = audio;
+
     const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      audio.pause();
+    };
   }, []);
+
+  const toggleMute = () => {
+    if (!bgmRef.current) return;
+    if (isMuted) {
+      bgmRef.current.play().catch(() => console.log("Autoplay blocked by browser."));
+      setIsMuted(false);
+    } else {
+      bgmRef.current.pause();
+      setIsMuted(true);
+    }
+  };
+
+  // Logika 7x Klik Easter Egg
+  const handleSecretClick = () => {
+    clickCountRef.current += 1;
+    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+
+    if (clickCountRef.current >= 7) {
+      setGlitchMode(true);
+      clickCountRef.current = 0;
+      setTimeout(() => setGlitchMode(false), 6000); // Glitch selama 6 detik
+    } else {
+      clickTimerRef.current = setTimeout(() => {
+        clickCountRef.current = 0;
+      }, 1500); // Jeda maksimal antar klik
+    }
+  };
 
   const diff = Math.max(range.end - now, 0);
   const finished = mounted && diff === 0;
@@ -155,8 +205,60 @@ export default function MaintenancePage() {
   };
 
   return (
-    <div className="dc-root fixed inset-0 z-50 overflow-y-auto overflow-x-hidden bg-[#07041a] text-white">
+    <div className={`dc-root fixed inset-0 z-50 overflow-y-auto overflow-x-hidden bg-[#07041a] text-white transition-all ${glitchMode ? "dc-glitch-active" : ""}`}>
       <style>{CSS}</style>
+
+      {/* EASTER EGG GLITCH MODAL */}
+      {glitchMode && (
+        <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-red-900/40 backdrop-blur-md pointer-events-none">
+          <h1 className="text-5xl md:text-7xl font-black text-red-500 tracking-[0.2em] mix-blend-screen animate-pulse">
+            SYSTEM.OVERRIDE()
+          </h1>
+          <p className="mt-4 bg-black px-6 py-2 border-2 border-red-500 text-red-400 font-mono text-lg font-bold shadow-[0_0_40px_rgba(239,68,68,0.8)]">
+            KODE RAHASIA UNLOCKED: "CHAOS2026"
+          </p>
+        </div>
+      )}
+
+      {/* MODAL SNEAK PEEK TRAILER */}
+      {trailerOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-4 backdrop-blur-xl transition-all">
+          <div className="dc-pop relative w-full max-w-3xl overflow-hidden rounded-3xl border border-white/20 bg-[#0a061e] shadow-[0_0_80px_rgba(139,92,246,0.5)]">
+            <button onClick={() => setTrailerOpen(false)} className="absolute right-4 top-4 z-10 rounded-full bg-black/50 p-2 text-white/70 backdrop-blur-md hover:bg-white/20 hover:text-white transition">
+              <X className="h-6 w-6" />
+            </button>
+            
+            {/* Tempat Kamu Naruh Video/GIF nanti */}
+            <div className="aspect-video w-full bg-white/5 flex items-center justify-center border-b border-white/10 relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0a061e] to-transparent z-0" />
+              <div className="text-center relative z-10">
+                <Play className="h-16 w-16 mx-auto mb-4 text-violet-400 opacity-50" />
+                <p className="text-sm font-bold tracking-[0.2em] text-white/50 uppercase">SNEAK PEEK TRAILER</p>
+                <p className="text-xs text-white/30 mt-2 max-w-xs mx-auto">(Ganti div ini dengan tag &lt;video&gt; atau &lt;img src="..."&gt; di kode nanti)</p>
+              </div>
+            </div>
+            
+            <div className="bg-gradient-to-t from-violet-900/30 to-transparent p-6 text-center">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/15 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-violet-300 mb-3">
+                <Eye className="h-3 w-3" /> Exclusive Preview
+              </div>
+              <h3 className="text-2xl font-black text-white">MODE ARENA BARU</h3>
+              <p className="mt-2 text-sm text-white/70 max-w-lg mx-auto leading-relaxed">
+                Setiap ronde kini dilengkapi Modifier Bencana Acak! Layar terbalik, kecepatan ganda, hingga sabotase rahasia. Persahabatanmu sedang diuji.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AUDIO TOGGLE */}
+      <button 
+        onClick={toggleMute}
+        className="fixed top-5 right-5 sm:top-8 sm:right-8 z-50 p-3 rounded-full bg-white/[0.05] border border-white/10 backdrop-blur-md hover:bg-white/10 transition-all text-white/70 hover:text-white hover:scale-110 active:scale-95 shadow-[0_0_15px_rgba(139,92,246,0.1)]"
+        aria-label="Toggle BGM"
+      >
+        {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5 text-cyan-300" />}
+      </button>
 
       <NetworkCanvas />
 
@@ -186,8 +288,8 @@ export default function MaintenancePage() {
           {finished ? "Hampir selesai" : "Maintenance berlangsung"}
         </div>
 
-        {/* LOGO + PROGRESS RING */}
-        <div className="dc-rise mt-8 sm:mt-10" style={{ animationDelay: ".08s" }}>
+        {/* LOGO + PROGRESS RING (TETAP SAMA, DITAMBAH ONCLICK EASTER EGG) */}
+        <div className="dc-rise mt-8 sm:mt-10 cursor-pointer group" style={{ animationDelay: ".08s" }} onClick={handleSecretClick}>
           <ProgressLogo progress={progress} mounted={mounted} />
         </div>
 
@@ -287,16 +389,27 @@ export default function MaintenancePage() {
           </ol>
         </section>
 
-        {/* FITUR BARU */}
+        {/* FITUR BARU DENGAN SNEAK PEEK TRAILER */}
         <section className="dc-rise mt-10 w-full sm:mt-12" style={{ animationDelay: ".46s" }}>
           <h2 className="mb-4 flex items-center justify-center gap-2 text-[11px] font-medium tracking-[0.2em] text-white/40 uppercase">
             <Sparkles className="h-3.5 w-3.5 text-violet-300" /> Yang akan hadir
           </h2>
           <div className="dc-scroll -mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0">
             {FEATURES.map((f) => (
-              <SpotCard key={f.title} className="w-[76%] shrink-0 snap-center sm:w-auto">
-                <div className="mb-3 inline-flex rounded-xl border border-violet-400/25 bg-violet-400/10 p-2.5">
-                  <f.icon className="h-4 w-4 text-violet-200" />
+              <SpotCard 
+                key={f.title} 
+                className={`w-[76%] shrink-0 snap-center sm:w-auto ${f.hasTrailer ? 'cursor-pointer hover:border-violet-500/50 hover:bg-white/[0.06] transition-colors' : ''}`}
+                onClick={() => f.hasTrailer && setTrailerOpen(true)}
+              >
+                <div className="flex justify-between items-start">
+                  <div className="mb-3 inline-flex rounded-xl border border-violet-400/25 bg-violet-400/10 p-2.5">
+                    <f.icon className="h-4 w-4 text-violet-200" />
+                  </div>
+                  {f.hasTrailer && (
+                    <span className="inline-flex animate-pulse items-center gap-1 rounded-full bg-rose-500/20 border border-rose-500/40 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-rose-300">
+                      <Play className="w-2.5 h-2.5 fill-current" /> Preview
+                    </span>
+                  )}
                 </div>
                 <p className="text-sm font-semibold text-white">{f.title}</p>
                 <p className="mt-1 text-xs leading-relaxed text-white/50">{f.desc}</p>
@@ -369,7 +482,7 @@ export default function MaintenancePage() {
             style={{ gridTemplateRows: gameOpen ? "1fr" : "0fr" }}
           >
             <div className="overflow-hidden">
-              <div className="pt-3">{gameOpen && <ChaosCatcher />}</div>
+              <div className="pt-3">{gameOpen && <ChaosCatcher isGlobalMuted={isMuted} />}</div>
             </div>
           </div>
         </section>
@@ -383,7 +496,7 @@ export default function MaintenancePage() {
 }
 
 /* =========================================================
- * LOGO dengan cincin progres + orbit
+ * LOGO dengan cincin progres + orbit (Ditambah hover efek Easter Egg)
  * ========================================================= */
 function ProgressLogo({ progress, mounted }: { progress: number; mounted: boolean }) {
   const R = 58;
@@ -423,8 +536,8 @@ function ProgressLogo({ progress, mounted }: { progress: number; mounted: boolea
         />
       </svg>
 
-      <div className="dc-float relative flex h-[84px] w-[84px] items-center justify-center rounded-[28px] border border-white/15 bg-gradient-to-br from-violet-500/30 to-cyan-400/10 shadow-[0_0_50px_-5px_rgba(139,92,246,.7)] backdrop-blur-md sm:h-[96px] sm:w-[96px]">
-        <Gamepad2 className="h-10 w-10 text-white sm:h-11 sm:w-11" strokeWidth={1.6} />
+      <div className="dc-float group-hover:scale-110 group-active:scale-90 transition-transform relative flex h-[84px] w-[84px] items-center justify-center rounded-[28px] border border-white/15 bg-gradient-to-br from-violet-500/30 to-cyan-400/10 shadow-[0_0_50px_-5px_rgba(139,92,246,.7)] backdrop-blur-md sm:h-[96px] sm:w-[96px]">
+        <Gamepad2 className="h-10 w-10 text-white sm:h-11 sm:w-11 group-hover:text-amber-300 transition-colors" strokeWidth={1.6} />
       </div>
 
       <span className="absolute -bottom-3 rounded-full border border-white/10 bg-[#0d0827] px-2.5 py-0.5 font-mono text-[11px] font-semibold text-cyan-200 tabular-nums">
@@ -440,9 +553,11 @@ function ProgressLogo({ progress, mounted }: { progress: number; mounted: boolea
 function SpotCard({
   children,
   className = "",
+  onClick
 }: {
   children: React.ReactNode;
   className?: string;
+  onClick?: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -457,6 +572,7 @@ function SpotCard({
   return (
     <div
       ref={ref}
+      onClick={onClick}
       onPointerMove={onMove}
       className={`dc-spot relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] p-5 text-left backdrop-blur-md ${className}`}
     >
@@ -518,7 +634,6 @@ function NetworkCanvas() {
           if (n.y < -10) n.y = h + 10;
           if (n.y > h + 10) n.y = -10;
 
-          // tarikan halus ke pointer
           const dx = pointer.x - n.x;
           const dy = pointer.y - n.y;
           const d2 = dx * dx + dy * dy;
@@ -605,13 +720,10 @@ function NetworkCanvas() {
 }
 
 /* =========================================================
- * MINI GAME: Tangkap Chaos (V2 - UPGRADED)
- * - Combo sistem: klik cepat = multiplier
- * - Particle effect saat klik
- * - Orb teleport jika lama tidak diklik
+ * MINI GAME: Tangkap Chaos (V2 - UPGRADED WITH WEB AUDIO SFX)
  * ========================================================= */
-function ChaosCatcher() {
-  const DURATION = 20; // Tambah durasi dikit biar lebih asik
+function ChaosCatcher({ isGlobalMuted }: { isGlobalMuted: boolean }) {
+  const DURATION = 20; 
   const [phase, setPhase] = useState<"idle" | "playing" | "done">("idle");
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(0);
@@ -623,6 +735,37 @@ function ChaosCatcher() {
   const scoreRef = useRef(0);
   const lastHitRef = useRef(0);
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Fungsi Play SFX menggunakan Web Audio API (TANPA FILE MP3 TAMBAHAN)
+  const playSFX = (comboLevel: number) => {
+    if (isGlobalMuted) return;
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.type = "sine";
+      // Nada makin tinggi kalau combonya gede
+      const freqStart = comboLevel >= 5 ? 1500 : comboLevel >= 3 ? 1200 : 800;
+      const freqEnd = freqStart + 300;
+      
+      osc.frequency.setValueAtTime(freqStart, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(freqEnd, ctx.currentTime + 0.1);
+      
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+      
+      osc.start();
+      osc.stop(ctx.currentTime + 0.1);
+    } catch (e) {
+      console.log("Audio not supported");
+    }
+  };
 
   useEffect(() => {
     setBest(Number(safeGet(STORAGE.best)) || 0);
@@ -642,24 +785,18 @@ function ChaosCatcher() {
     setPhase("playing");
   };
 
-  // Teleport otomatis kalau user kelamaan (Chaos mode)
   useEffect(() => {
     if (phase !== "playing") return;
-    
-    // Semakin tinggi skor, semakin cepat dia teleport otomatis (kabur)
     const escapeTime = Math.max(700, 2000 - (score * 50)); 
-    
     idleTimerRef.current = setInterval(() => {
       move();
-      setCombo(1); // Reset combo kalau kelamaan
+      setCombo(1);
     }, escapeTime);
-
     return () => {
       if (idleTimerRef.current) clearInterval(idleTimerRef.current);
     };
   }, [phase, score, move]);
 
-  // Main Timer
   useEffect(() => {
     if (phase !== "playing") return;
     const id = setInterval(() => {
@@ -679,7 +816,6 @@ function ChaosCatcher() {
     return () => clearInterval(id);
   }, [phase]);
 
-  // Hapus partikel efek setelah beberapa detik
   useEffect(() => {
     if (particles.length > 0) {
       const timer = setTimeout(() => {
@@ -696,9 +832,8 @@ function ChaosCatcher() {
     const now = Date.now();
     let currentCombo = combo;
     
-    // Logika Combo: Kalau jarak klik < 800ms, combo naik
     if (now - lastHitRef.current < 800) {
-      currentCombo = Math.min(currentCombo + 1, 5); // Maksimal 5x combo
+      currentCombo = Math.min(currentCombo + 1, 5);
     } else {
       currentCombo = 1;
     }
@@ -706,16 +841,15 @@ function ChaosCatcher() {
     setCombo(currentCombo);
     lastHitRef.current = now;
     
-    // Tambah skor dikali combo
+    // Play SFX (tanpa MP3)
+    playSFX(currentCombo);
+
     scoreRef.current += (1 * currentCombo);
     setScore(scoreRef.current);
     
-    // Efek ledakan partikel di posisi klik
     setParticles(prev => [...prev, { id: Date.now(), x: pos.x, y: pos.y }]);
-
     move();
     
-    // Reset timer kabur
     if (idleTimerRef.current) {
       clearInterval(idleTimerRef.current);
       const escapeTime = Math.max(700, 2000 - (score * 50)); 
@@ -726,7 +860,6 @@ function ChaosCatcher() {
     }
   };
 
-  // Ukuran Orb mengecil, tapi ada batas wajar agar masih bisa diklik di HP
   const size = Math.max(38, 70 - score * 0.8);
   const getComboColor = () => {
     if(combo >= 5) return "text-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.5)]";
@@ -766,14 +899,12 @@ function ChaosCatcher() {
 
         {phase === "playing" && (
           <>
-            {/* UI Top Bar */}
             <div className="pointer-events-none absolute inset-x-4 top-3 flex justify-between items-center z-20">
               <div className="flex flex-col">
                 <span className="text-xs font-semibold text-white/60">Skor</span>
                 <span className="text-xl font-black text-cyan-300 leading-none">{score}</span>
               </div>
               
-              {/* Combo Indicator */}
               {combo > 1 && (
                 <div className={`dc-pop text-lg font-black italic tracking-wider ${getComboColor()} transition-colors`}>
                   {combo}x COMBO!
@@ -788,7 +919,6 @@ function ChaosCatcher() {
               </div>
             </div>
 
-            {/* Progress Bar Waktu Bawah */}
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1.5 bg-white/5 z-20">
               <div
                 className={`h-full transition-[width] duration-1000 ease-linear ${left <= 5 ? "bg-rose-500" : "bg-gradient-to-r from-violet-400 to-cyan-300"}`}
@@ -796,27 +926,20 @@ function ChaosCatcher() {
               />
             </div>
 
-            {/* Render Efek Ledakan Partikel */}
             {particles.map(p => (
               <div 
                 key={p.id}
                 className="pointer-events-none absolute w-16 h-16 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-cyan-400/50 scale-150 opacity-0 transition-all duration-500 ease-out"
-                style={{ 
-                  left: `${p.x}%`, 
-                  top: `${p.y}%`,
-                  animation: 'dc-particle-burst 0.5s forwards'
-                }}
+                style={{ left: `${p.x}%`, top: `${p.y}%`, animation: 'dc-particle-burst 0.5s forwards' }}
               />
             ))}
 
-            {/* Target Orb Utama */}
             <button
               onPointerDown={hit}
               aria-label="Tangkap orb"
               className="dc-pop absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle_at_30%_30%,#a5f3fc,#8b5cf6)] shadow-[0_0_25px_5px_rgba(139,92,246,.8)] hover:scale-110 active:scale-75 transition-transform"
               style={{ left: `${pos.x}%`, top: `${pos.y}%`, width: size, height: size }}
             >
-              {/* Inner core glow */}
               <div className="absolute inset-2 rounded-full bg-white/20 blur-sm animate-pulse" />
             </button>
           </>
@@ -831,11 +954,9 @@ function ChaosCatcher() {
                 {score}
               </p>
             </div>
-            
             <p className="text-[11px] font-medium text-white/50 mt-1">
               {score > 0 && score >= best ? "🏆 GILAAA! REKOR BARU! 🔥" : "Yah... kurang cepet. Coba lagi!"}
             </p>
-            
             <button
               onClick={start}
               className="mt-3 h-11 w-full max-w-[140px] rounded-xl border border-violet-400/40 bg-violet-500/20 px-5 text-xs font-bold text-white transition hover:bg-violet-500/40 active:scale-95 shadow-[0_0_15px_rgba(139,92,246,0.2)]"
@@ -866,6 +987,20 @@ const CSS = `
 @keyframes dc-drift1 { 0%,100% { transform: translate(0,0) scale(1) } 50% { transform: translate(8%,6%) scale(1.15) } }
 @keyframes dc-drift2 { 0%,100% { transform: translate(0,0) scale(1) } 50% { transform: translate(-10%,-4%) scale(1.1) } }
 @keyframes dc-particle-burst { 0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; border-width: 8px; } 100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; border-width: 0px; } }
+
+/* CSS UNTUK EFEK EASTER EGG GLITCH */
+.dc-glitch-active {
+  animation: dc-glitch-anim 0.2s cubic-bezier(.25, .46, .45, .94) both infinite;
+  filter: hue-rotate(90deg) contrast(150%) saturate(200%);
+}
+@keyframes dc-glitch-anim {
+  0% { transform: translate(0) }
+  20% { transform: translate(-8px, 8px) }
+  40% { transform: translate(-8px, -8px) }
+  60% { transform: translate(8px, 8px) }
+  80% { transform: translate(8px, -8px) }
+  100% { transform: translate(0) }
+}
 
 .dc-rise { opacity: 0; animation: dc-rise .8s cubic-bezier(.22,1,.36,1) forwards; }
 .dc-tick { animation: dc-tick .35s ease-out; }
@@ -903,6 +1038,6 @@ button.dc-pop { animation: dc-pop .22s ease-out; }
 .dc-scroll::-webkit-scrollbar { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
-  .dc-rise, .dc-tick, .dc-orbit, .dc-orbit-rev, .dc-float, .dc-gradient-text, .dc-aurora { animation: none !important; opacity: 1; }
+  .dc-rise, .dc-tick, .dc-orbit, .dc-orbit-rev, .dc-float, .dc-gradient-text, .dc-aurora, .dc-glitch-active { animation: none !important; opacity: 1; }
 }
 `;
