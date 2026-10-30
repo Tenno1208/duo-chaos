@@ -86,12 +86,6 @@ export default function MaintenancePage() {
   const [isMuted, setIsMuted] = useState(true);
   const bgmRef = useRef<HTMLAudioElement | null>(null);
 
-  // Fitur Easter Egg
-  const [glitchMode, setGlitchMode] = useState(false);
-  const clickCountRef = useRef(0);
-  const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Fitur Sneak Peek Modal
   const [trailerOpen, setTrailerOpen] = useState(false);
 
   useEffect(() => {
@@ -158,21 +152,7 @@ bgmRef.current = audio;
     }
   };
 
-  // Logika 7x Klik Easter Egg
-  const handleSecretClick = () => {
-    clickCountRef.current += 1;
-    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
 
-    if (clickCountRef.current >= 7) {
-      setGlitchMode(true);
-      clickCountRef.current = 0;
-      setTimeout(() => setGlitchMode(false), 6000); // Glitch selama 6 detik
-    } else {
-      clickTimerRef.current = setTimeout(() => {
-        clickCountRef.current = 0;
-      }, 1500); // Jeda maksimal antar klik
-    }
-  };
 
   const diff = Math.max(range.end - now, 0);
   const finished = mounted && diff === 0;
@@ -205,20 +185,10 @@ bgmRef.current = audio;
   };
 
   return (
-    <div className={`dc-root fixed inset-0 z-50 overflow-y-auto overflow-x-hidden bg-[#07041a] text-white transition-all ${glitchMode ? "dc-glitch-active" : ""}`}>
+    <div className="dc-root fixed inset-0 z-50 overflow-y-auto overflow-x-hidden bg-[#070614] text-white transition-all">
       <style>{CSS}</style>
 
-      {/* EASTER EGG GLITCH MODAL */}
-      {glitchMode && (
-        <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-red-900/40 backdrop-blur-md pointer-events-none">
-          <h1 className="text-5xl md:text-7xl font-black text-red-500 tracking-[0.2em] mix-blend-screen animate-pulse">
-            SYSTEM.OVERRIDE()
-          </h1>
-          <p className="mt-4 bg-black px-6 py-2 border-2 border-red-500 text-red-400 font-mono text-lg font-bold shadow-[0_0_40px_rgba(239,68,68,0.8)]">
-            KODE RAHASIA UNLOCKED: "CHAOS2026"
-          </p>
-        </div>
-      )}
+
 
       {/* MODAL SNEAK PEEK TRAILER */}
 {trailerOpen && (
@@ -301,7 +271,7 @@ bgmRef.current = audio;
 )}
 
         {/* LOGO + PROGRESS RING (TETAP SAMA, DITAMBAH ONCLICK EASTER EGG) */}
-        <div className="dc-rise mt-8 sm:mt-10 cursor-pointer group" style={{ animationDelay: ".08s" }} onClick={handleSecretClick}>
+        <div className="dc-rise mt-8 sm:mt-10">
           <ProgressLogo progress={progress} mounted={mounted} />
         </div>
 
@@ -528,9 +498,9 @@ function ProgressLogo({ progress, mounted }: { progress: number; mounted: boolea
       <svg viewBox="0 0 140 140" className="absolute inset-0 h-full w-full -rotate-90">
         <defs>
           <linearGradient id="dc-ring" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#8b5cf6" />
-            <stop offset="50%" stopColor="#22d3ee" />
-            <stop offset="100%" stopColor="#f472b6" />
+            <stop offset="0%" stopColor="#4c1d95" />
+            <stop offset="50%" stopColor="#6d28d9" />
+            <stop offset="100%" stopColor="#7c3aed" />
           </linearGradient>
         </defs>
         <circle cx="70" cy="70" r={R} fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="3" />
@@ -1000,19 +970,7 @@ const CSS = `
 @keyframes dc-drift2 { 0%,100% { transform: translate(0,0) scale(1) } 50% { transform: translate(-10%,-4%) scale(1.1) } }
 @keyframes dc-particle-burst { 0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; border-width: 8px; } 100% { transform: translate(-50%, -50%) scale(2.5); opacity: 0; border-width: 0px; } }
 
-/* CSS UNTUK EFEK EASTER EGG GLITCH */
-.dc-glitch-active {
-  animation: dc-glitch-anim 0.2s cubic-bezier(.25, .46, .45, .94) both infinite;
-  filter: hue-rotate(90deg) contrast(150%) saturate(200%);
-}
-@keyframes dc-glitch-anim {
-  0% { transform: translate(0) }
-  20% { transform: translate(-8px, 8px) }
-  40% { transform: translate(-8px, -8px) }
-  60% { transform: translate(8px, 8px) }
-  80% { transform: translate(8px, -8px) }
-  100% { transform: translate(0) }
-}
+
 
 .dc-rise { opacity: 0; animation: dc-rise .8s cubic-bezier(.22,1,.36,1) forwards; }
 .dc-tick { animation: dc-tick .35s ease-out; }
@@ -1023,11 +981,11 @@ const CSS = `
 button.dc-pop { animation: dc-pop .22s ease-out; }
 
 .dc-gradient-text {
-  background: linear-gradient(90deg, #a78bfa, #22d3ee, #f472b6, #a78bfa);
+  background: linear-gradient(90deg, #4c1d95, #6d28d9, #7c3aed);
   background-size: 200% auto;
   -webkit-background-clip: text; background-clip: text;
   color: transparent;
-  animation: dc-shimmer 5s linear infinite;
+  animation: dc-shimmer 8s linear infinite;
 }
 
 .dc-aurora { position: absolute; border-radius: 9999px; filter: blur(90px); opacity: .5; will-change: transform; }
@@ -1050,6 +1008,6 @@ button.dc-pop { animation: dc-pop .22s ease-out; }
 .dc-scroll::-webkit-scrollbar { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
-  .dc-rise, .dc-tick, .dc-orbit, .dc-orbit-rev, .dc-float, .dc-gradient-text, .dc-aurora, .dc-glitch-active { animation: none !important; opacity: 1; }
+  .dc-rise, .dc-tick, .dc-orbit, .dc-orbit-rev, .dc-float, .dc-gradient-text, .dc-aurora { animation: none !important; opacity: 1; }
 }
 `;
